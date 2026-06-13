@@ -8,6 +8,8 @@ import { CategoriesModule } from './categories/categories.module';
 import { SubCategoriesModule } from './sub-categories/sub-categories.module';
 import { Category } from './categories/category.entity';
 import { SubCategory } from './sub-categories/sub-category.entity';
+import { Product } from './products/product.entity';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -22,13 +24,15 @@ import { SubCategory } from './sub-categories/sub-category.entity';
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_DATABASE'),
-        entities: [User, Category, SubCategory],
+        entities: [User, Category, SubCategory, Product],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
     UsersModule,
     AuthModule,
-    CategoriesModule
+    CategoriesModule,
+    SubCategoriesModule,
+    ProductsModule,
   ],
 })
 export class AppModule {}
