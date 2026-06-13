@@ -1,3 +1,4 @@
+import { CustomersModule } from './customers/customers.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -42,6 +43,7 @@ import { CompaniesModule } from './companies/companies.module';
     StocksModule,
     VendorsModule,
     CompaniesModule,
+      CustomersModule,
   ],
 })
 export class AppModule {}
