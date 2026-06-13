@@ -42,4 +42,12 @@ export class CreateStockDto {
   @IsOptional()
   @IsString()
   purchaseDate?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  companyId?: string;
 }

@@ -44,4 +44,12 @@ export class UpdateStockDto {
   @IsOptional()
   @IsUUID()
   productId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  vendorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  companyId?: string;
 }

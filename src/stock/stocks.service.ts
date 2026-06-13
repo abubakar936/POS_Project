@@ -19,6 +19,21 @@ export class StocksService {
     const product = await this.productRepo.findOne({ where: { id: dto.productId, deletedAt: IsNull() } });
     if (!product) throw new BadRequestException('Product not found');
 
+    if (!dto.vendorId && !dto.companyId) {
+      throw new BadRequestException('Either vendorId or companyId must be provided');
+    }
+
+    // validate vendor/company if provided
+    if (dto.vendorId) {
+      const vendor = await this.repo.manager.getRepository('vendors').findOne({ where: { id: dto.vendorId, deletedAt: IsNull(), isActive: true } });
+      if (!vendor) throw new BadRequestException('Vendor not found or inactive');
+    }
+
+    if (dto.companyId) {
+      const company = await this.repo.manager.getRepository('companies').findOne({ where: { id: dto.companyId, deletedAt: IsNull(), isActive: true } });
+      if (!company) throw new BadRequestException('Company not found or inactive');
+    }
+
     const entity = this.repo.create({
       productId: dto.productId,
       quantity: dto.quantity,
@@ -31,6 +46,8 @@ export class StocksService {
       printedPrice: dto.printedPrice ?? null,
       totalPurchaseValue: dto.totalPurchaseValue ?? null,
       purchaseDate: dto.purchaseDate ? new Date(dto.purchaseDate) : null,
+      vendorId: dto.vendorId ?? null,
+      companyId: dto.companyId ?? null,
     });
 
     return this.repo.save(entity);
@@ -42,6 +59,8 @@ export class StocksService {
 
     const qb = this.repo.createQueryBuilder('s').where('s.deletedAt IS NULL');
     qb.leftJoinAndSelect('s.product', 'product');
+    qb.leftJoinAndSelect('s.vendor', 'vendor');
+    qb.leftJoinAndSelect('s.company', 'company');
 
     if (query.productId) qb.andWhere('s.productId = :productId', { productId: query.productId });
     if (query.search) qb.andWhere('product.name ILIKE :search', { search: `%${query.search}%` });
@@ -56,6 +75,8 @@ export class StocksService {
     const stock = await this.repo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.product', 'product')
+      .leftJoinAndSelect('s.vendor', 'vendor')
+      .leftJoinAndSelect('s.company', 'company')
       .where('s.id = :id', { id })
       .andWhere('s.deletedAt IS NULL')
       .getOne();
@@ -71,6 +92,20 @@ export class StocksService {
     if ((dto as any).productId) {
       const product = await this.productRepo.findOne({ where: { id: (dto as any).productId, deletedAt: IsNull() } });
       if (!product) throw new BadRequestException('Product not found');
+    }
+
+    if (!(dto as any).vendorId && !(dto as any).companyId && !stock.vendorId && !stock.companyId) {
+      throw new BadRequestException('Either vendorId or companyId must be provided');
+    }
+
+    if ((dto as any).vendorId) {
+      const vendor = await this.repo.manager.getRepository('vendors').findOne({ where: { id: (dto as any).vendorId, deletedAt: IsNull(), isActive: true } });
+      if (!vendor) throw new BadRequestException('Vendor not found or inactive');
+    }
+
+    if ((dto as any).companyId) {
+      const company = await this.repo.manager.getRepository('companies').findOne({ where: { id: (dto as any).companyId, deletedAt: IsNull(), isActive: true } });
+      if (!company) throw new BadRequestException('Company not found or inactive');
     }
 
     Object.assign(stock, dto);

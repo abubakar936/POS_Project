@@ -8,6 +8,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Product } from '../products/product.entity';
+import { Vendor } from '../vendors/vendor.entity';
+import { Company } from '../companies/company.entity';
 
 @Entity('stocks')
 export class Stock {
@@ -58,4 +60,16 @@ export class Stock {
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
+
+  @Column('uuid', { nullable: true })
+  vendorId?: string | null;
+
+  @ManyToOne(() => Vendor, (v) => v.stocks, { nullable: true })
+  vendor?: Vendor | null;
+
+  @Column('uuid', { nullable: true })
+  companyId?: string | null;
+
+  @ManyToOne(() => Company, (c) => c.stocks, { nullable: true })
+  company?: Company | null;
 }
