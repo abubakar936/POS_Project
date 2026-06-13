@@ -10,6 +10,8 @@ import { Category } from './categories/category.entity';
 import { SubCategory } from './sub-categories/sub-category.entity';
 import { Product } from './products/product.entity';
 import { ProductsModule } from './products/products.module';
+import { Stock } from './stock/stock.entity';
+import { StocksModule } from './stock/stocks.module';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { ProductsModule } from './products/products.module';
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_DATABASE'),
-        entities: [User, Category, SubCategory, Product],
+        entities: [User, Category, SubCategory, Product, Stock],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
@@ -33,6 +35,7 @@ import { ProductsModule } from './products/products.module';
     CategoriesModule,
     SubCategoriesModule,
     ProductsModule,
+    StocksModule,
   ],
 })
 export class AppModule {}

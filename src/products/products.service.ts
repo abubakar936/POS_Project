@@ -79,7 +79,7 @@ export class ProductsService {
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.category', 'category')
       .leftJoinAndSelect('p.subCategory', 'subCategory')
-      .leftJoinAndSelect('p.parentProduct', 'parentProduct')
+    //   .leftJoinAndSelect('p.parentProduct', 'parentProduct')
       .where('p.id = :id', { id })
       .andWhere('p.deletedAt IS NULL')
       .getOne();

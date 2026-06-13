@@ -1,0 +1,271 @@
+{
+  "info": {
+    "_postman_id": "pos-api-collection-0001",
+    "name": "POS API - Categories & SubCategories",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection for testing Category and SubCategory endpoints. Use the Login request to set the auth token."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "authToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (optional)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"Admin\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.access_token) {",
+                  "  pm.collectionVariables.set('authToken', json.access_token);",
+                  "  console.log('authToken set');",
+                  "} else {",
+                  "  console.warn('No access_token found in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Electronics\",\n  \"description\": \"Electronic items\"\n}" }
+          }
+        },
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/categories?page=1&limit=10&search=&isActive=", "host": ["{{baseUrl}}"], "path": ["categories"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }, { "key": "isActive", "value": "" } ] }
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/categories/:id", "host": ["{{baseUrl}}"], "path": ["categories", ":id"] }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/categories/:id", "host": ["{{baseUrl}}"], "path": ["categories", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"isActive\": true\n}" }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/categories/:id", "host": ["{{baseUrl}}"], "path": ["categories", ":id"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SubCategories",
+      "item": [
+        {
+          "name": "Create SubCategory",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/sub-categories", "host": ["{{baseUrl}}"], "path": ["sub-categories"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mobile\",\n  \"description\": \"Mobile phones\",\n  \"categoryId\": \"<PUT_CATEGORY_ID_HERE>\"\n}" }
+          }
+        },
+        {
+          "name": "List SubCategories",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/sub-categories?page=1&limit=10&search=&isActive=", "host": ["{{baseUrl}}"], "path": ["sub-categories"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }, { "key": "isActive", "value": "" } ] }
+          }
+        },
+        {
+          "name": "Get SubCategory by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/sub-categories/:id", "host": ["{{baseUrl}}"], "path": ["sub-categories", ":id"] }
+          }
+        },
+        {
+          "name": "Update SubCategory",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/sub-categories/:id", "host": ["{{baseUrl}}"], "path": ["sub-categories", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Sub\",\n  \"categoryId\": \"<OPTIONAL_NEW_CATEGORY_ID>\"\n}" }
+          }
+        },
+        {
+          "name": "Delete SubCategory",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/sub-categories/:id", "host": ["{{baseUrl}}"], "path": ["sub-categories", ":id"] }
+          }
+        }
+      ]
+    }
+    ,
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Sample Product\",\n  \"sku\": \"SKU123\",\n  \"barcode\": \"BAR123\",\n  \"categoryId\": \"<CATEGORY_ID>\",\n  \"subCategoryId\": \"<SUBCATEGORY_ID>\",\n  \"retailPrice\": \"100.00\",\n  \"salePrice\": \"90.00\"\n}" }
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/products?page=1&limit=10&search=", "host": ["{{baseUrl}}"], "path": ["products"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" } ] }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/products/:id", "host": ["{{baseUrl}}"], "path": ["products", ":id"] }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products/:id", "host": ["{{baseUrl}}"], "path": ["products", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Product\"\n}" }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/products/:id", "host": ["{{baseUrl}}"], "path": ["products", ":id"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stocks",
+      "item": [
+        {
+          "name": "Create Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/stocks", "host": ["{{baseUrl}}"], "path": ["stocks"] },
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"<PRODUCT_ID>\",\n  \"quantity\": \"10\",\n  \"remainingQuantity\": \"10\",\n  \"locationType\": \"store\",\n  \"rackLocation\": \"A1\",\n  \"purchasePrice\": \"50.00\",\n  \"salePrice\": \"60.00\",\n  \"purchaseDate\": \"2026-06-13T00:00:00.000Z\"\n}" }
+          }
+        },
+        {
+          "name": "List Stocks",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/stocks?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["stocks"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" } ] }
+          }
+        },
+        {
+          "name": "Get Stock by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/stocks/:id", "host": ["{{baseUrl}}"], "path": ["stocks", ":id"] }
+          }
+        },
+        {
+          "name": "Update Stock",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/stocks/:id", "host": ["{{baseUrl}}"], "path": ["stocks", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"remainingQuantity\": \"8\"\n}" }
+          }
+        },
+        {
+          "name": "Delete Stock",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/stocks/:id", "host": ["{{baseUrl}}"], "path": ["stocks", ":id"] }
+          }
+        }
+      ]
+    }
+  ]
+}
