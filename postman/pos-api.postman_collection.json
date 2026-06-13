@@ -226,7 +226,7 @@
               { "key": "Authorization", "value": "Bearer {{authToken}}" }
             ],
             "url": { "raw": "{{baseUrl}}/stocks", "host": ["{{baseUrl}}"], "path": ["stocks"] },
-            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"<PRODUCT_ID>\",\n  \"quantity\": \"10\",\n  \"remainingQuantity\": \"10\",\n  \"locationType\": \"store\",\n  \"rackLocation\": \"A1\",\n  \"purchasePrice\": \"50.00\",\n  \"salePrice\": \"60.00\",\n  \"purchaseDate\": \"2026-06-13T00:00:00.000Z\"\n}" }
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"<PRODUCT_ID>\",\n  \"quantity\": \"10\",\n  \"remainingQuantity\": \"10\",\n  \"locationType\": \"store\",\n  \"rackLocation\": \"A1\",\n  \"purchasePrice\": \"50.00\",\n  \"salePrice\": \"60.00\",\n  \"purchaseDate\": \"2026-06-13T00:00:00.000Z\",\n  \"vendorId\": \"<VENDOR_ID>\",\n  \"companyId\": \"<COMPANY_ID>\"\n}" }
           }
         },
         {
@@ -263,6 +263,112 @@
             "method": "DELETE",
             "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
             "url": { "raw": "{{baseUrl}}/stocks/:id", "host": ["{{baseUrl}}"], "path": ["stocks", ":id"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendors",
+      "item": [
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/vendors", "host": ["{{baseUrl}}"], "path": ["vendors"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Vendor A\",\n  \"companyName\": \"VendorCo\",\n  \"email\": \"vendor@example.com\",\n  \"phone1\": \"1234567890\"\n}" }
+          }
+        },
+        {
+          "name": "List Vendors",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/vendors?page=1&limit=10&search=&isActive=", "host": ["{{baseUrl}}"], "path": ["vendors"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }, { "key": "isActive", "value": "" } ] }
+          }
+        },
+        {
+          "name": "Get Vendor by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/vendors/:id", "host": ["{{baseUrl}}"], "path": ["vendors", ":id"] }
+          }
+        },
+        {
+          "name": "Update Vendor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/vendors/:id", "host": ["{{baseUrl}}"], "path": ["vendors", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"phone1\": \"0987654321\"\n}" }
+          }
+        },
+        {
+          "name": "Delete Vendor",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/vendors/:id", "host": ["{{baseUrl}}"], "path": ["vendors", ":id"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Companies",
+      "item": [
+        {
+          "name": "Create Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/companies", "host": ["{{baseUrl}}"], "path": ["companies"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Company A\",\n  \"email\": \"company@example.com\",\n  \"phone1\": \"111222333\"\n}" }
+          }
+        },
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/companies?page=1&limit=10&search=&isActive=", "host": ["{{baseUrl}}"], "path": ["companies"], "query": [ { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }, { "key": "search", "value": "" }, { "key": "isActive", "value": "" } ] }
+          }
+        },
+        {
+          "name": "Get Company by ID",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/companies/:id", "host": ["{{baseUrl}}"], "path": ["companies", ":id"] }
+          }
+        },
+        {
+          "name": "Update Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/companies/:id", "host": ["{{baseUrl}}"], "path": ["companies", ":id"] },
+            "body": { "mode": "raw", "raw": "{\n  \"phone1\": \"222333444\"\n}" }
+          }
+        },
+        {
+          "name": "Delete Company",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/companies/:id", "host": ["{{baseUrl}}"], "path": ["companies", ":id"] }
           }
         }
       ]
