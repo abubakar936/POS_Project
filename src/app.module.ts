@@ -17,6 +17,13 @@ import { Vendor } from './vendors/vendor.entity';
 import { Company } from './companies/company.entity';
 import { VendorsModule } from './vendors/vendors.module';
 import { CompaniesModule } from './companies/companies.module';
+import { Customer } from './customers/customer.entity';
+import { OrdersModule } from './orders/orders.module';
+import { Order } from './orders/order.entity';
+import { OrderItem } from './orders/order-item.entity';
+import { InvoicesModule } from './invoices/invoices.module';
+import { Invoice } from './invoices/invoice.entity';
+import { InvoicePayment } from './invoices/invoice-payment.entity';
 
 @Module({
   imports: [
@@ -31,7 +38,20 @@ import { CompaniesModule } from './companies/companies.module';
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_DATABASE'),
-        entities: [User, Category, SubCategory, Product, Stock, Vendor, Company],
+        entities: [
+          User,
+          Category,
+          SubCategory,
+          Product,
+          Stock,
+          Vendor,
+          Company,
+          Customer,
+          Order,
+          OrderItem,
+          Invoice,
+          InvoicePayment,
+        ],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
       }),
     }),
@@ -43,7 +63,9 @@ import { CompaniesModule } from './companies/companies.module';
     StocksModule,
     VendorsModule,
     CompaniesModule,
-      CustomersModule,
+    CustomersModule,
+    OrdersModule,
+    InvoicesModule,
   ],
 })
 export class AppModule {}

@@ -1,13 +1,16 @@
 {
   "info": {
     "_postman_id": "pos-api-collection-0001",
-    "name": "POS API - Categories & SubCategories",
+    "name": "POS API",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Collection for testing Category and SubCategory endpoints. Use the Login request to set the auth token."
+    "description": "Collection for testing POS endpoints, including orders and invoices. Use the Login request to set the auth token."
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "authToken", "value": "" }
+    { "key": "authToken", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "invoiceId", "value": "" },
+    { "key": "paymentId", "value": "" }
   ],
   "item": [
     {
@@ -369,6 +372,259 @@
             "method": "DELETE",
             "header": [ { "key": "Authorization", "value": "Bearer {{authToken}}" } ],
             "url": { "raw": "{{baseUrl}}/companies/:id", "host": ["{{baseUrl}}"], "path": ["companies", ":id"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerName\": \"Walk-in customer\",\n  \"customerPhone\": \"555-0100\",\n  \"discountAmount\": \"0.00\",\n  \"note\": \"POS order\",\n  \"items\": [\n    {\n      \"productId\": \"<PRODUCT_UUID>\",\n      \"stockId\": \"<STOCK_UUID>\",\n      \"quantity\": \"2.00\",\n      \"discountAmount\": \"0.00\"\n    }\n  ]\n}"
+            },
+            "description": "Sale price is read from the selected stock. Creating the order deducts inventory. Omit customerId to use customerName/customerPhone/customerAddress instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json && json.id) pm.collectionVariables.set('orderId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=1&limit=10&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":id"],
+              "variable": [{ "key": "id", "value": "{{orderId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update Order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":id"],
+              "variable": [{ "key": "id", "value": "{{orderId}}" }]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"Updated order note\"\n}" },
+            "description": "Including items replaces all order lines and adjusts stock. Orders cannot be changed after an invoice has been created."
+          }
+        },
+        {
+          "name": "Delete Order",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", ":id"],
+              "variable": [{ "key": "id", "value": "{{orderId}}" }]
+            },
+            "description": "Soft-deletes the order and restores its reserved stock. Orders with invoices cannot be deleted."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Create Invoice from Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/invoices", "host": ["{{baseUrl}}"], "path": ["invoices"] },
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"note\": \"Invoice note\",\n  \"dueDate\": \"2026-10-30T00:00:00.000Z\"\n}" },
+            "description": "Each order can have only one invoice. The invoice stores a snapshot of the order."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json && json.id) pm.collectionVariables.set('invoiceId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices?page=1&limit=10&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id"],
+              "variable": [{ "key": "id", "value": "{{invoiceId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id"],
+              "variable": [{ "key": "id", "value": "{{invoiceId}}" }]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"Updated invoice note\",\n  \"dueDate\": \"2026-11-15T00:00:00.000Z\"\n}" },
+            "description": "Only the note and due date can be updated; invoice totals and order details are snapshots."
+          }
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id"],
+              "variable": [{ "key": "id", "value": "{{invoiceId}}" }]
+            },
+            "description": "Remove active payments before deleting an invoice."
+          }
+        },
+        {
+          "name": "Add Invoice Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id", "payments"],
+              "variable": [{ "key": "id", "value": "{{invoiceId}}" }]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": \"50.00\",\n  \"paymentMethod\": \"CASH\",\n  \"reference\": \"Optional receipt/reference\",\n  \"note\": \"Payment note\"\n}" },
+            "description": "Supported payment methods: CASH, CARD, BANK_TRANSFER, OTHER. Payments cannot exceed the balance due."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  const payments = json && json.payments;",
+                  "  if (payments && payments.length) pm.collectionVariables.set('paymentId', payments[payments.length - 1].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Invoice Payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id", "payments"],
+              "variable": [{ "key": "id", "value": "{{invoiceId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Remove Invoice Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/:id/payments/:paymentId",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", ":id", "payments", ":paymentId"],
+              "variable": [
+                { "key": "id", "value": "{{invoiceId}}" },
+                { "key": "paymentId", "value": "{{paymentId}}" }
+              ]
+            }
           }
         }
       ]

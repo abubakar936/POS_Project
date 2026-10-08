@@ -57,6 +57,34 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Orders and invoices
+
+All order and invoice endpoints require the existing JWT authorization.
+
+- `POST /orders` creates an order with one or more product/stock lines. Each line
+  requires `productId`, `stockId`, and a positive `quantity`; the sale price is
+  read from the selected stock record. Optional customer details can be provided
+  with `customerId` or as `customerName`, `customerPhone`, and `customerAddress`.
+  Line discounts and the order-level `discountAmount` are amounts in the same
+  currency as stock prices; the total is calculated by the API.
+- `GET /orders?page=1&limit=10&search=` lists orders; `GET /orders/:id` reads
+  one. `PATCH /orders/:id` updates customer details, note, discounts, or replaces
+  the lines. `DELETE /orders/:id` soft-deletes an order.
+- Creating, replacing, or deleting order lines adjusts stock in the same
+  database transaction. Orders cannot be edited or deleted after an invoice has
+  been created for them.
+- `POST /invoices` creates an invoice from `{ "orderId": "<ORDER_ID>" }`.
+  Invoice items, customer details, and totals are immutable snapshots of the
+  order. `GET /invoices`, `GET /invoices/:id`, `PATCH /invoices/:id`, and
+  `DELETE /invoices/:id` provide invoice CRUD; updates are limited to the note
+  and due date.
+- `POST /invoices/:id/payments` records `{ "amount": "50.00",
+  "paymentMethod": "CASH" }`. `GET /invoices/:id/payments` lists active
+  payments and `DELETE /invoices/:id/payments/:paymentId` removes a payment.
+  Payments cannot exceed the invoice balance; invoice responses include
+  `amountPaid`, `balanceDue`, and `status`. An invoice with active payments must
+  have those payments removed before it can be deleted.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
