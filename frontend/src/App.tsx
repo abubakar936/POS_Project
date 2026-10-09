@@ -8,6 +8,7 @@ import { ProductFormPage } from './features/products/ProductFormPage';
 import { ProductsPage } from './features/products/ProductsPage';
 import { SubcategoriesPage } from './features/subcategories/SubcategoriesPage';
 import { OrdersPage } from './features/orders/OrdersPage';
+import { StocksPage } from './features/stocks/StocksPage';
 import { ACCESS_TOKEN_STORAGE_KEY } from './lib/api/client';
 
 function RequireAuthentication() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="products/new" element={<ProductFormPage />} />
           <Route path="products/:id/edit" element={<ProductFormPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="stocks" element={<StocksPage />} />
           <Route path="*" element={<PlaceholderPage />} />
         </Route>
       </Route>

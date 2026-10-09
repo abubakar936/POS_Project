@@ -52,4 +52,7 @@ export interface StockRecord {
   vendor?: VendorOption | null;
   companyId?: string | null;
   company?: CompanyOption | null;
+  createdAt?: string;
+  purchaseDate?: string | null;
+  totalPurchaseValue?: string | null;
 }

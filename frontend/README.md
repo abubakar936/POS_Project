@@ -37,6 +37,17 @@ bulk stock summary endpoint. Stock quantities are therefore totaled from stock
 records for the visible product page. Tax and variant definitions are not part
 of the current product API; only the existing `hasVariants` flag is editable.
 
+## Stock / Inventory
+
+The inventory page loads stock records and products from `/stocks` and
+`/products`, then aggregates quantities by product. Search, category, and
+stock-status filtering run against the loaded inventory because the stock list
+API only supports product name search and product ID filtering. Adding stock
+creates a stock lot with `POST /stocks`; the backend starts its remaining
+quantity at the received quantity and requires an active vendor or company.
+The backend does not expose stock movement history, quantity adjustments,
+reasons, or notes, so the page does not offer those actions.
+
 ## Orders / Sales
 
 The Orders / Sales page uses the authenticated `/orders` API for paginated
