@@ -9,5 +9,8 @@ export async function login(email: string, password: string): Promise<void> {
     method: 'POST',
     body: { email, password },
   });
+  if (!response.access_token) {
+    throw new Error('The server did not return an access token.');
+  }
   window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, response.access_token);
 }

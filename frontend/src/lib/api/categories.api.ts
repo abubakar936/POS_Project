@@ -1,6 +1,5 @@
 import { apiRequest, encodeQuery } from './client';
-import type { PageResult } from './catalog.types';
-import type { CategoryOption } from './catalog.types';
+import type { CategoryOption, PageResult } from './catalog.types';
 
 export interface Category extends CategoryOption {
   description?: string | null;

@@ -22,6 +22,7 @@ import { Pagination } from '../../components/ui/Pagination';
 import { Select } from '../../components/ui/Select';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Table } from '../../components/ui/Table';
+import { Textarea } from '../../components/ui/Textarea';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api/client';
 import { login } from '../../lib/api/auth.api';
@@ -642,11 +643,10 @@ export function CategoriesPage() {
           </label>
           <label className="block space-y-1.5 text-xs font-medium text-slate-700">
             Description
-            <textarea
+            <Textarea
               rows={4}
               value={formValues.description}
               onChange={(event) => updateForm('description', event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15"
             />
           </label>
           {editingCategory && (

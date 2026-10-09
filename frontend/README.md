@@ -10,7 +10,9 @@ npm run dev
 
 Open the Vite URL printed in the terminal (normally `http://localhost:5173`).
 The development server proxies `/api` requests to the NestJS backend at
-`http://localhost:3000`. Start the backend in a separate PowerShell window:
+`http://localhost:3001` by default. Configure `VITE_BACKEND_URL` in a local
+`.env` file if your backend uses another address. Start the backend in a
+separate PowerShell window:
 
 ```powershell
 cd D:\POS_Project\backend
@@ -43,6 +45,15 @@ their `categoryId` relationship. The API does not provide a product count by
 category, and its delete guard only checks active subcategories, so the page
 offers reversible activation/deactivation instead of deletion to preserve
 existing references.
+
+## Sign in
+
+Open `http://localhost:5173/login` and sign in with an existing POS account.
+The frontend posts `{ email, password }` to `/auth/login`, stores the returned
+`access_token` in browser local storage, and sends it as a bearer token on
+subsequent API requests. Protected application routes redirect to the sign-in
+page and return to the requested page after a successful login. The backend
+does not currently expose a logout or token-refresh endpoint.
 
 ## Production build
 
