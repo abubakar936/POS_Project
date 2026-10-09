@@ -58,7 +58,7 @@ export interface OrderInvoice {
   totalAmount: string;
   amountPaid: string;
   balanceDue: string;
-  status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | string;
+  status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID';
   payments: InvoicePayment[];
 }
 

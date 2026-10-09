@@ -37,6 +37,16 @@ bulk stock summary endpoint. Stock quantities are therefore totaled from stock
 records for the visible product page. Tax and variant definitions are not part
 of the current product API; only the existing `hasVariants` flag is editable.
 
+## Orders / Sales
+
+The Orders / Sales page uses the authenticated `/orders` API for paginated
+order records, order-number/customer/phone search, and order details. The
+backend has no separate Sales API and does not store order, fulfillment, or
+payment status. Invoices and payment summaries are loaded separately from
+`/invoices` when viewing an order. Removing an un-invoiced order uses the
+backend delete operation, which restores its reserved stock; invoiced orders
+cannot be changed or removed.
+
 ## Categories
 
 The Categories page uses `/categories` pagination, name search, status filtering,

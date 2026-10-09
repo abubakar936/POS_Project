@@ -175,7 +175,7 @@ export function OrdersPage() {
 
   const tableBody = loading ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={7}>
         <FeedbackState
           tone="loading"
           title="Loading orders"
@@ -185,7 +185,7 @@ export function OrdersPage() {
     </tr>
   ) : loadError ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={7}>
         <FeedbackState
           tone="error"
           title={authError ? 'Sign-in required' : 'Orders could not be loaded'}
@@ -210,7 +210,7 @@ export function OrdersPage() {
     </tr>
   ) : orders.length === 0 ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={7}>
         <FeedbackState
           tone="empty"
           title={search ? 'No matching orders' : 'No orders yet'}
@@ -352,7 +352,8 @@ export function OrdersPage() {
           The Orders API supports pagination and search by order number,
           customer name, or phone. It does not expose date/customer filters,
           order or fulfillment states, or payment status. Payment information
-          below comes from the linked invoice when one exists.
+          below comes from the linked invoice when one exists. The order
+          contract has no tax fields.
         </p>
       </div>
 
@@ -563,7 +564,7 @@ export function OrdersPage() {
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Remove this order?"
-        description={`This permanently removes ${pendingDelete?.orderNumber ?? 'this order'} from the active order list and restores its reserved quantities to stock. The server will reject the action if an invoice exists.`}
+        description={`This removes ${pendingDelete?.orderNumber ?? 'this order'} from the active order list and restores its reserved quantities to stock. The server will reject the action if an invoice exists.`}
         confirmLabel="Remove order"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => void removeOrder()}
