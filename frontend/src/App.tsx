@@ -6,6 +6,8 @@ import { CategoriesPage } from './features/categories/CategoriesPage';
 import { PlaceholderPage } from './features/placeholder/PlaceholderPage';
 import { ProductFormPage } from './features/products/ProductFormPage';
 import { ProductsPage } from './features/products/ProductsPage';
+import { SubcategoriesPage } from './features/subcategories/SubcategoriesPage';
+import { OrdersPage } from './features/orders/OrdersPage';
 import { ACCESS_TOKEN_STORAGE_KEY } from './lib/api/client';
 
 function RequireAuthentication() {
@@ -24,9 +26,11 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="categories" element={<CategoriesPage />} />
+          <Route path="sub-categories" element={<SubcategoriesPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="products/new" element={<ProductFormPage />} />
           <Route path="products/:id/edit" element={<ProductFormPage />} />
+          <Route path="orders" element={<OrdersPage />} />
           <Route path="*" element={<PlaceholderPage />} />
         </Route>
       </Route>

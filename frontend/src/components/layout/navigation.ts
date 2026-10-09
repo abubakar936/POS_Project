@@ -25,7 +25,7 @@ export const navigationItems: NavigationItem[] = [
   { label: 'Products', path: '/products', icon: Package },
   { label: 'Categories', path: '/categories', icon: Boxes },
   { label: 'Subcategories', path: '/sub-categories', icon: Tags },
-  { label: 'Orders', path: '/orders', icon: ClipboardList },
+  { label: 'Orders / Sales', path: '/orders', icon: ClipboardList },
   { label: 'Invoices', path: '/invoices', icon: FileText },
   { label: 'Stock / Inventory', path: '/stocks', icon: Warehouse },
   { label: 'Customers', path: '/customers', icon: Users },

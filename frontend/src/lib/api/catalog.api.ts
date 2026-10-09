@@ -40,6 +40,10 @@ export function getActiveCategories(signal?: AbortSignal) {
   return getAllPages<CategoryOption>('/categories', signal, 'true');
 }
 
+export function getCategories(signal?: AbortSignal) {
+  return getAllPages<CategoryOption>('/categories', signal);
+}
+
 export function getSubcategories(signal?: AbortSignal) {
   return getAllPages<SubcategoryOption>('/sub-categories', signal);
 }
