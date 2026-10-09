@@ -12,6 +12,7 @@ import {
 import { StocksService } from './stocks.service';
 import { CreateStockDto } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
+import { UpdateStockSalePriceDto } from './dto/update-stock-sale-price.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('stocks')
@@ -32,6 +33,14 @@ export class StocksController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.svc.findOne(id);
+  }
+
+  @Patch(':id/sale-price')
+  updateSalePrice(
+    @Param('id') id: string,
+    @Body() dto: UpdateStockSalePriceDto,
+  ) {
+    return this.svc.updateSalePrice(id, dto);
   }
 
   @Patch(':id')

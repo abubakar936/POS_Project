@@ -58,6 +58,17 @@ payment status. Invoices and payment summaries are loaded separately from
 backend delete operation, which restores its reserved stock; invoiced orders
 cannot be changed or removed.
 
+## Stock / Inventory
+
+The inventory page displays individual stock lots with each lot's purchase
+cost, selling price, remaining quantity, location, supplier, and remaining
+cost value. The total on-hand value is calculated from the actual remaining
+quantity and fixed purchase cost of each lot. A stock receipt initializes its
+remaining quantity to the received quantity. Selling prices can be updated
+through `PATCH /stocks/:id/sale-price`; recorded purchase cost and on-hand
+quantity cannot be changed through stock update endpoints. Stock movement
+history and adjustments are not available in the current backend.
+
 ## Categories
 
 The Categories page uses `/categories` pagination, name search, status filtering,

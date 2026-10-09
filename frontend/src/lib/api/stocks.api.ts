@@ -57,7 +57,9 @@ async function getAllPages<T>(
       () => worker(),
     ),
   );
-  return pages.flatMap((result) => result.data);
+  return pages
+    .sort((left, right) => left.meta.page - right.meta.page)
+    .flatMap((result) => result.data);
 }
 
 export function listInventoryStocks(signal?: AbortSignal) {
@@ -73,4 +75,14 @@ export function createStock(payload: CreateStockPayload) {
     method: 'POST',
     body: payload,
   });
+}
+
+export function updateStockSalePrice(id: string, salePrice: string) {
+  return apiRequest<InventoryStockRecord>(
+    `/stocks/${encodeURIComponent(id)}/sale-price`,
+    {
+      method: 'PATCH',
+      body: { salePrice },
+    },
+  );
 }

@@ -4,6 +4,7 @@ import { Repository, IsNull } from 'typeorm';
 import { Stock } from './stock.entity';
 import { CreateStockDto } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
+import { UpdateStockSalePriceDto } from './dto/update-stock-sale-price.dto';
 import { Product } from '../products/product.entity';
 
 @Injectable()
@@ -37,7 +38,7 @@ export class StocksService {
     const entity = this.repo.create({
       productId: dto.productId,
       quantity: dto.quantity,
-      remainingQuantity: dto.remainingQuantity ?? dto.quantity,
+      remainingQuantity: dto.quantity,
       minimumQuantity: dto.minimumQuantity ?? null,
       locationType: dto.locationType,
       rackLocation: dto.rackLocation ?? null,
@@ -89,27 +90,37 @@ export class StocksService {
     const stock = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!stock) throw new NotFoundException('Stock not found');
 
-    if ((dto as any).productId) {
-      const product = await this.productRepo.findOne({ where: { id: (dto as any).productId, deletedAt: IsNull() } });
+    if (dto.productId) {
+      const product = await this.productRepo.findOne({ where: { id: dto.productId, deletedAt: IsNull() } });
       if (!product) throw new BadRequestException('Product not found');
     }
 
-    if (!(dto as any).vendorId && !(dto as any).companyId && !stock.vendorId && !stock.companyId) {
+    if (!dto.vendorId && !dto.companyId && !stock.vendorId && !stock.companyId) {
       throw new BadRequestException('Either vendorId or companyId must be provided');
     }
 
-    if ((dto as any).vendorId) {
-      const vendor = await this.repo.manager.getRepository('vendors').findOne({ where: { id: (dto as any).vendorId, deletedAt: IsNull(), isActive: true } });
+    if (dto.vendorId) {
+      const vendor = await this.repo.manager.getRepository('vendors').findOne({ where: { id: dto.vendorId, deletedAt: IsNull(), isActive: true } });
       if (!vendor) throw new BadRequestException('Vendor not found or inactive');
     }
 
-    if ((dto as any).companyId) {
-      const company = await this.repo.manager.getRepository('companies').findOne({ where: { id: (dto as any).companyId, deletedAt: IsNull(), isActive: true } });
+    if (dto.companyId) {
+      const company = await this.repo.manager.getRepository('companies').findOne({ where: { id: dto.companyId, deletedAt: IsNull(), isActive: true } });
       if (!company) throw new BadRequestException('Company not found or inactive');
     }
 
     Object.assign(stock, dto);
-    if ((dto as any).purchaseDate) stock.purchaseDate = new Date((dto as any).purchaseDate);
+    if (dto.purchaseDate) stock.purchaseDate = new Date(dto.purchaseDate);
+    return this.repo.save(stock);
+  }
+
+  async updateSalePrice(id: string, dto: UpdateStockSalePriceDto) {
+    const stock = await this.repo.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
+    if (!stock) throw new NotFoundException('Stock not found');
+
+    stock.salePrice = dto.salePrice;
     return this.repo.save(stock);
   }
 

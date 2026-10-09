@@ -30,6 +30,7 @@ import {
   createStock,
   listInventoryProducts,
   listInventoryStocks,
+  updateStockSalePrice,
   type CreateStockPayload,
   type InventoryStockRecord,
 } from '../../lib/api/stocks.api';
@@ -40,9 +41,24 @@ const PAGE_SIZE = 20;
 interface InventoryProduct {
   product: Product;
   records: InventoryStockRecord[];
-  quantity: number;
-  minimumQuantity: number;
   hasMinimum: boolean;
+  quantityHundredths: bigint;
+  minimumQuantityHundredths: bigint;
+  stockValueCents: bigint;
+}
+
+function formatQuantityHundredths(value: bigint): string {
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const whole = absolute / 100n;
+  const fraction = (absolute % 100n).toString();
+  const grouped = new Intl.NumberFormat('en-PK').format(whole);
+  return `${negative ? '−' : ''}${grouped}${fraction === '0' ? '' : `.${fraction.padStart(2, '0')}`}`;
+}
+
+interface InventoryRow {
+  item: InventoryProduct;
+  record: InventoryStockRecord | null;
 }
 
 interface StockFormValues {
@@ -87,18 +103,51 @@ function formatQuantity(value: number): string {
   }).format(value);
 }
 
+function parseHundredths(value: string | null | undefined): bigint {
+  const normalized = value?.trim() ?? '0';
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(normalized);
+  if (!match) return 0n;
+  const sign = match[1] === '-' ? -1n : 1n;
+  const whole = BigInt(match[2] ?? '0');
+  const fraction = BigInt((match[3] ?? '').padEnd(2, '0'));
+  return sign * (whole * 100n + fraction);
+}
+
+function lotValueCents(record: InventoryStockRecord): bigint {
+  const product =
+    parseHundredths(record.remainingQuantity) *
+    parseHundredths(record.purchasePrice);
+  return product >= 0n
+    ? (product + 50n) / 100n
+    : (product - 50n) / 100n;
+}
+
+function formatRupeesFromCents(cents: bigint): string {
+  const negative = cents < 0n;
+  const absolute = negative ? -cents : cents;
+  const fraction = (absolute % 100n).toString().padStart(2, '0');
+  const grouped = new Intl.NumberFormat('en-PK').format(absolute / 100n);
+  return `${negative ? '−' : ''}Rs. ${grouped}.${fraction}`;
+}
+
 function isNonNegativeDecimal(value: string, integerDigits = 10): boolean {
   return new RegExp(`^\\d{1,${integerDigits}}(?:\\.\\d{1,2})?$`).test(value);
 }
 
 function getInventoryStatus(item: InventoryProduct) {
-  if (item.quantity < 0) {
+  if (
+    item.quantityHundredths < 0n ||
+    item.records.some((record) => parseHundredths(record.remainingQuantity) < 0n)
+  ) {
     return { label: 'Negative stock', tone: 'danger' as const };
   }
-  if (item.records.length === 0 || item.quantity === 0) {
+  if (item.records.length === 0 || item.quantityHundredths === 0n) {
     return { label: 'Out of stock', tone: 'danger' as const };
   }
-  if (item.hasMinimum && item.quantity <= item.minimumQuantity) {
+  if (
+    item.hasMinimum &&
+    item.quantityHundredths <= item.minimumQuantityHundredths
+  ) {
     return { label: 'Low stock', tone: 'warning' as const };
   }
   return { label: 'In stock', tone: 'success' as const };
@@ -173,6 +222,11 @@ export function StocksPage() {
   const [submitError, setSubmitError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [priceEditStock, setPriceEditStock] = useState<InventoryStockRecord | null>(null);
+  const [priceEditValue, setPriceEditValue] = useState('');
+  const [priceEditError, setPriceEditError] = useState('');
+  const [priceConfirmOpen, setPriceConfirmOpen] = useState(false);
+  const [priceSaving, setPriceSaving] = useState(false);
   const location = useLocation();
   const { showToast } = useToast();
 
@@ -220,19 +274,28 @@ export function StocksPage() {
     }
     return products.map((product) => {
       const records = recordsByProduct.get(product.id) ?? [];
+      const quantityHundredths = records.reduce(
+        (total, record) => total + parseHundredths(record.remainingQuantity),
+        0n,
+      );
+      const thresholds = records
+        .map((record) =>
+          record.minimumQuantity === null || record.minimumQuantity === undefined
+            ? null
+            : parseHundredths(record.minimumQuantity),
+        )
+        .filter((value): value is bigint => value !== null);
       return {
         product,
         records,
-        quantity: records.reduce(
-          (total, record) => total + parseQuantity(record.remainingQuantity),
-          0,
-        ),
-        minimumQuantity: records.reduce(
-          (total, record) => total + parseQuantity(record.minimumQuantity),
-          0,
-        ),
-        hasMinimum: records.some(
-          (record) => record.minimumQuantity !== null && record.minimumQuantity !== undefined,
+        hasMinimum: thresholds.length > 0,
+        quantityHundredths,
+        minimumQuantityHundredths: thresholds.length
+          ? thresholds.reduce((maximum, value) => value > maximum ? value : maximum, 0n)
+          : 0n,
+        stockValueCents: records.reduce(
+          (total, record) => total + lotValueCents(record),
+          0n,
         ),
       };
     });
@@ -247,6 +310,10 @@ export function StocksPage() {
   const negativeStockCount = inventory.filter(
     (item) => getInventoryStatus(item).label === 'Negative stock',
   ).length;
+  const totalStockValueCents = inventory.reduce(
+    (total, item) => total + item.stockValueCents,
+    0n,
+  );
 
   const filteredInventory = useMemo(() => {
     const query = searchInput.trim().toLocaleLowerCase();
@@ -263,6 +330,7 @@ export function StocksPage() {
         statusFilter === 'all' ||
         (statusFilter === 'low' && status === 'Low stock') ||
         (statusFilter === 'out' && status === 'Out of stock') ||
+        (statusFilter === 'negative' && status === 'Negative stock') ||
         (statusFilter === 'in' && status === 'In stock');
       return matchesSearch && matchesCategory && matchesStatus;
     });
@@ -270,8 +338,14 @@ export function StocksPage() {
 
   useEffect(() => setPage(1), [categoryFilter, searchInput, statusFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredInventory.length / PAGE_SIZE));
-  const visibleInventory = filteredInventory.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const inventoryRows: InventoryRow[] = filteredInventory.flatMap<InventoryRow>(
+    (item) =>
+      item.records.length
+        ? item.records.map((record) => ({ item, record }))
+        : [{ item, record: null }],
+  );
+  const pageCount = Math.max(1, Math.ceil(inventoryRows.length / PAGE_SIZE));
+  const visibleInventory = inventoryRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const activeVendors = vendors.filter((vendor) => vendor.isActive);
   const activeCompanies = companies.filter((company) => company.isActive);
 
@@ -324,6 +398,47 @@ export function StocksPage() {
     }
   }
 
+  function saveSalePrice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!priceEditStock) return;
+    if (!isNonNegativeDecimal(priceEditValue)) {
+      setPriceEditError('Enter a valid price with up to 2 decimal places.');
+      return;
+    }
+    setPriceEditError('');
+    setPriceConfirmOpen(true);
+  }
+
+  async function confirmSalePriceUpdate() {
+    if (!priceEditStock) return;
+    setPriceSaving(true);
+    setPriceEditError('');
+    try {
+      const updated = await updateStockSalePrice(priceEditStock.id, priceEditValue);
+      setStocks((current) =>
+        current.map((record) =>
+          record.id === updated.id ? { ...record, ...updated } : record,
+        ),
+      );
+      setPriceConfirmOpen(false);
+      setPriceEditStock(null);
+      showToast({
+        tone: 'success',
+        title: 'Selling price updated',
+        description: `${products.find((product) => product.id === updated.productId)?.name ?? 'Stock lot'} is now ${formatRupees(updated.salePrice)} per unit.`,
+      });
+    } catch (error) {
+      setPriceEditError(
+        error instanceof Error
+          ? error.message
+          : 'Could not update the selling price.',
+      );
+      setPriceConfirmOpen(false);
+    } finally {
+      setPriceSaving(false);
+    }
+  }
+
   const selectedProduct = products.find((product) => product.id === values.productId);
 
   return (
@@ -359,11 +474,12 @@ export function StocksPage() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <SummaryCard label="Products" value={loading ? '—' : products.length.toLocaleString()} icon={<Boxes size={18} />} />
             <SummaryCard label="Low stock" value={loading ? '—' : lowStockCount.toLocaleString()} icon={<TriangleAlert size={18} />} tone="warning" />
             <SummaryCard label="Out of stock" value={loading ? '—' : outOfStockCount.toLocaleString()} icon={<AlertCircle size={18} />} tone="danger" />
             <SummaryCard label="Negative stock" value={loading ? '—' : negativeStockCount.toLocaleString()} icon={<AlertCircle size={18} />} tone="danger" />
+            <SummaryCard label="On-hand cost value" value={loading ? '—' : formatRupeesFromCents(totalStockValueCents)} icon={<Boxes size={18} />} />
           </div>
 
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -387,49 +503,71 @@ export function StocksPage() {
                 <option value="in">In stock</option>
                 <option value="low">Low stock</option>
                 <option value="out">Out of stock</option>
+                <option value="negative">Negative stock</option>
               </Select>
             </div>
             <span className="whitespace-nowrap text-xs text-slate-500">
-              {loading ? 'Loading inventory…' : `${filteredInventory.length.toLocaleString()} products`}
+              {loading ? 'Loading inventory…' : `${inventoryRows.length.toLocaleString()} stock lots`}
             </span>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <Table headers={['Product', 'Category', 'Current quantity', 'Stock status', 'Location', 'Actions']} caption="Stock inventory">
+            <Table headers={['Product / lot', 'Category', 'Available', 'Purchase / sale price', 'On-hand cost value', 'Stock status', 'Location / supplier', 'Actions']} caption="Stock inventory by receipt lot">
               {loading ? (
-                <tr><td colSpan={6}><FeedbackState tone="loading" title="Loading inventory" description="Fetching products and stock records." /></td></tr>
+                <tr><td colSpan={8}><FeedbackState tone="loading" title="Loading inventory" description="Fetching products and stock records." /></td></tr>
               ) : visibleInventory.length === 0 ? (
-                <tr><td colSpan={6}><FeedbackState tone="empty" title={filteredInventory.length ? 'No inventory on this page' : 'No matching inventory'} description={products.length === 0 ? 'Create products before receiving stock.' : 'Try changing the search or filters, or receive stock for a product.'} action={products.length > 0 && !filteredInventory.length ? <Button onClick={beginAddStock}><PackagePlus size={15} /> Add Stock</Button> : undefined} /></td></tr>
-              ) : visibleInventory.map((item) => {
+                <tr><td colSpan={8}><FeedbackState tone="empty" title={inventoryRows.length ? 'No inventory on this page' : 'No matching inventory'} description={products.length === 0 ? 'Create products before receiving stock.' : 'Try changing the search or filters, or receive stock for a product.'} action={products.length > 0 && !inventoryRows.length ? <Button onClick={beginAddStock}><PackagePlus size={15} /> Add Stock</Button> : undefined} /></td></tr>
+              ) : visibleInventory.map(({ item, record }) => {
                 const status = getInventoryStatus(item);
-                const locations = [...new Set(item.records.map((record) => `${record.locationType}${record.rackLocation ? ` · ${record.rackLocation}` : ''}`))];
+                const location = record
+                  ? `${record.locationType}${record.rackLocation ? ` · ${record.rackLocation}` : ''}`
+                  : '—';
+                const supplier = record?.vendor?.name ?? record?.company?.name;
                 return (
-                  <tr key={item.product.id} className="text-sm text-slate-600">
+                  <tr key={record?.id ?? item.product.id} className="text-sm text-slate-600">
                     <td className="px-4 py-3.5 first:pl-5">
                       <p className="font-medium text-slate-800">{item.product.name}</p>
-                      <p className="mt-0.5 font-mono text-xs text-slate-400">{item.product.sku || item.product.barcode || 'No SKU / barcode'}</p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-400">
+                        {item.product.sku || item.product.barcode || 'No SKU / barcode'}
+                        {record ? ` · ${new Date(record.purchaseDate ?? record.createdAt).toLocaleDateString()}` : ' · No stock lot'}
+                      </p>
                     </td>
                     <td className="px-4 py-3.5">{item.product.category?.name || '—'}</td>
-                    <td className="px-4 py-3.5 text-right tabular-nums font-medium text-slate-800">{formatQuantity(item.quantity)}{item.product.measuringUnit ? ` ${item.product.measuringUnit}` : ''}</td>
+                    <td className="px-4 py-3.5 text-right tabular-nums font-medium text-slate-800">
+                      {record ? `${formatQuantityHundredths(parseHundredths(record.remainingQuantity))}${item.product.measuringUnit ? ` ${item.product.measuringUnit}` : ''}` : '—'}
+                      <p className="mt-0.5 text-[10px] font-normal text-slate-400">Product total: {formatQuantityHundredths(item.quantityHundredths)}</p>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {record ? (
+                        <>
+                          <p>Cost: <span className="font-medium tabular-nums text-slate-800">{formatRupees(record.purchasePrice)}</span></p>
+                          <p className="mt-1">Sell: <span className="font-medium tabular-nums text-slate-800">{formatRupees(record.salePrice)}</span></p>
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-3.5 text-right tabular-nums font-medium text-slate-800">
+                      {record ? formatRupeesFromCents(lotValueCents(record)) : '—'}
+                    </td>
                     <td className="px-4 py-3.5">
                       <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-                      {item.hasMinimum && <p className="mt-1 text-[10px] text-slate-400">Threshold {formatQuantity(item.minimumQuantity)}</p>}
+                      {item.hasMinimum && <p className="mt-1 text-[10px] text-slate-400">Product threshold {formatQuantityHundredths(item.minimumQuantityHundredths)}</p>}
                     </td>
                     <td className="px-4 py-3.5">
-                      {locations.length ? <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><MapPin size={13} />{locations.join(', ')}</span> : '—'}
+                      {record ? <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><MapPin size={13} />{location}{supplier ? ` · ${supplier}` : ''}</span> : '—'}
                     </td>
                     <td className="px-4 py-3.5 last:pr-5 text-right">
-                      <Button size="sm" variant="secondary" onClick={() => { setValues({ ...emptyForm, productId: item.product.id }); setFieldErrors({}); setSubmitError(''); setFormOpen(true); }}>
-                        Add stock
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {record && <Button size="sm" variant="secondary" onClick={() => { setPriceEditStock(record); setPriceEditValue(record.salePrice); setPriceEditError(''); }}>Edit sale price</Button>}
+                        <Button size="sm" variant="secondary" onClick={() => { setValues({ ...emptyForm, productId: item.product.id }); setFieldErrors({}); setSubmitError(''); setFormOpen(true); }}>Add stock</Button>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
             </Table>
-            {!loading && filteredInventory.length > 0 && (
+            {!loading && inventoryRows.length > 0 && (
               <div className="border-t border-slate-100 px-4 py-3">
-                <Pagination page={page} totalPages={pageCount} totalItems={filteredInventory.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+                <Pagination page={page} totalPages={pageCount} totalItems={inventoryRows.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
               </div>
             )}
           </div>
@@ -438,11 +576,11 @@ export function StocksPage() {
             <TriangleAlert size={15} className="mt-0.5 shrink-0" />
             <p>
               Low stock is determined from the product’s total remaining quantity
-              compared with the sum of configured minimum quantities. Products
-              without stock records, or with no remaining quantity, are out of
-              stock. The backend has no stock movement/history, adjustment,
-              reason, or notes API; this screen only receives stock using
-              <code className="mx-1">POST /stocks</code>.
+              compared with the largest configured product threshold across its
+              lots. On-hand cost value is the sum of each lot’s remaining
+              quantity multiplied by its recorded purchase price. Editing a
+              lot’s sale price does not change its purchase cost. The backend
+              has no stock movement/history, adjustment, reason, or notes API.
             </p>
           </div>
         </>
@@ -514,6 +652,50 @@ export function StocksPage() {
         </form>
       </Modal>
 
+      <Modal
+        open={priceEditStock !== null}
+        onClose={() => { if (!priceSaving) setPriceEditStock(null); }}
+        title="Update lot selling price"
+        description="Purchase cost is kept as the original recorded acquisition cost."
+      >
+        <form onSubmit={saveSalePrice} className="space-y-4">
+          {priceEditError && (
+            <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {priceEditError}
+            </p>
+          )}
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <p className="font-medium">
+              {products.find((product) => product.id === priceEditStock?.productId)?.name ?? 'Selected product'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Purchase cost: {formatRupees(priceEditStock?.purchasePrice)} per unit
+            </p>
+          </div>
+          <FormField label="Selling price per unit">
+            <Input
+              id="stock-updated-sale-price"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={priceEditValue}
+              onChange={(event) => { setPriceEditValue(event.target.value); setPriceEditError(''); }}
+            />
+          </FormField>
+          <p className="text-xs leading-5 text-slate-500">
+            New orders using this stock lot will use its updated selling price.
+            Previously recorded orders keep their original price.
+          </p>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="secondary" disabled={priceSaving} onClick={() => setPriceEditStock(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={priceSaving}>Review price change</Button>
+          </div>
+        </form>
+      </Modal>
+
       <ConfirmDialog
         open={confirmOpen}
         title="Confirm stock receipt"
@@ -522,6 +704,15 @@ export function StocksPage() {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => void submitStock()}
         isLoading={saving}
+      />
+      <ConfirmDialog
+        open={priceConfirmOpen}
+        title="Confirm selling price update"
+        description={`Change this lot’s selling price from ${formatRupees(priceEditStock?.salePrice)} to ${formatRupees(priceEditValue)} per unit? Its purchase cost and stock quantity will not change.`}
+        confirmLabel="Update selling price"
+        onCancel={() => setPriceConfirmOpen(false)}
+        onConfirm={() => void confirmSalePriceUpdate()}
+        isLoading={priceSaving}
       />
     </section>
   );
