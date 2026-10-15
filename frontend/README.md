@@ -116,6 +116,20 @@ are the stock records currently available in the backend, not a separate
 purchase ledger; outstanding balances and accounting purchase records are not
 implemented.
 
+## Customers
+
+The Customers page uses the authenticated `/customers` CRUD endpoints and
+shows the server-stored customer fields. Search supports customer names,
+email, primary phone, and alternate phone; phone search is included in the
+backend query. The page displays `current_balance` only as a stored customer
+field because the backend does not update it from orders or payments. Total
+purchases and an accounting outstanding-balance calculation are not exposed.
+
+Customer order history is queried from `/orders` using the linked `customerId`
+and paginated by the server. The order API now supports this optional filter.
+Only orders linked by customer ID appear in this history; walk-in orders with
+matching names or phone numbers are not inferred to belong to the customer.
+
 ## Categories
 
 The Categories page uses `/categories` pagination, name search, status filtering,

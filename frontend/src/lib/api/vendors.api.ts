@@ -28,15 +28,15 @@ export interface VendorQuery {
 
 export interface VendorPayload {
   name: string;
-  companyName?: string;
-  email?: string;
-  phone1?: string;
-  phone2?: string;
-  address1?: string;
-  address2?: string;
-  reference?: string;
-  note?: string;
-  description?: string;
+  companyName?: string | null;
+  email?: string | null;
+  phone1?: string | null;
+  phone2?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  reference?: string | null;
+  note?: string | null;
+  description?: string | null;
   isActive?: boolean;
 }
 

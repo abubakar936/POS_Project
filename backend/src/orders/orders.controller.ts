@@ -30,11 +30,13 @@ export class OrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('customerId') customerId?: string,
   ) {
     return this.ordersService.findAll({
       page: Number(page),
       limit: Number(limit),
       search,
+      customerId,
     });
   }
 

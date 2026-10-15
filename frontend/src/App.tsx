@@ -13,6 +13,7 @@ import { UsersPage } from './features/users/UsersPage';
 import { StocksPage } from './features/stocks/StocksPage';
 import { VendorsPage } from './features/vendors/VendorsPage';
 import { ACCESS_TOKEN_STORAGE_KEY } from './lib/api/client';
+import { CustomersPage } from './features/customers/CustomersPage';
 
 function RequireAuthentication() {
   const location = useLocation();
@@ -38,6 +39,8 @@ export default function App() {
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="stocks" element={<StocksPage />} />
+          <Route path="vendors" element={<VendorsPage />} />
+          <Route path="customers" element={<CustomersPage />} />
           <Route path="vendors" element={<VendorsPage />} />
           <Route path="*" element={<PlaceholderPage />} />
         </Route>

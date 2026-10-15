@@ -69,23 +69,29 @@ function formatDate(value?: string | null): string {
   }).format(date);
 }
 
-function optionalValue(value: string | undefined): string | undefined {
+function optionalValue(
+  value: string | null | undefined,
+  clearEmpty: boolean,
+): string | null | undefined {
   const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+  return normalized || (clearEmpty ? null : undefined);
 }
 
-function makePayload(values: VendorFormValues): VendorPayload {
+function makePayload(
+  values: VendorFormValues,
+  clearEmpty: boolean,
+): VendorPayload {
   return {
     name: values.name.trim(),
-    companyName: optionalValue(values.companyName),
-    email: optionalValue(values.email),
-    phone1: optionalValue(values.phone1),
-    phone2: optionalValue(values.phone2),
-    address1: optionalValue(values.address1),
-    address2: optionalValue(values.address2),
-    reference: optionalValue(values.reference),
-    description: optionalValue(values.description),
-    note: optionalValue(values.note),
+    companyName: optionalValue(values.companyName, clearEmpty),
+    email: optionalValue(values.email, clearEmpty),
+    phone1: optionalValue(values.phone1, clearEmpty),
+    phone2: optionalValue(values.phone2, clearEmpty),
+    address1: optionalValue(values.address1, clearEmpty),
+    address2: optionalValue(values.address2, clearEmpty),
+    reference: optionalValue(values.reference, clearEmpty),
+    description: optionalValue(values.description, clearEmpty),
+    note: optionalValue(values.note, clearEmpty),
   };
 }
 
@@ -121,37 +127,37 @@ function VendorFields({
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Company name
-        <Input maxLength={255} value={values.companyName} onChange={(event) => onChange('companyName', event.target.value)} className="mt-1" />
+        <Input maxLength={255} value={values.companyName ?? ''} onChange={(event) => onChange('companyName', event.target.value)} className="mt-1" />
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Email
-        <Input type="email" maxLength={255} value={values.email} onChange={(event) => onChange('email', event.target.value)} className="mt-1" aria-invalid={Boolean(emailError)} aria-describedby={emailError ? 'vendor-email-error' : undefined} />
+        <Input type="email" maxLength={255} value={values.email ?? ''} onChange={(event) => onChange('email', event.target.value)} className="mt-1" aria-invalid={Boolean(emailError)} aria-describedby={emailError ? 'vendor-email-error' : undefined} />
         {emailError && <span id="vendor-email-error" className="mt-1 block text-xs text-rose-700">{emailError}</span>}
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Phone
-        <Input maxLength={50} value={values.phone1} onChange={(event) => onChange('phone1', event.target.value)} className="mt-1" />
+        <Input maxLength={50} value={values.phone1 ?? ''} onChange={(event) => onChange('phone1', event.target.value)} className="mt-1" />
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Alternate phone
-        <Input maxLength={50} value={values.phone2} onChange={(event) => onChange('phone2', event.target.value)} className="mt-1" />
+        <Input maxLength={50} value={values.phone2 ?? ''} onChange={(event) => onChange('phone2', event.target.value)} className="mt-1" />
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Reference
-        <Input maxLength={255} value={values.reference} onChange={(event) => onChange('reference', event.target.value)} className="mt-1" />
+        <Input maxLength={255} value={values.reference ?? ''} onChange={(event) => onChange('reference', event.target.value)} className="mt-1" />
       </label>
       <label className="block text-xs font-medium text-slate-600 sm:col-span-2">
         Address
-        <Input maxLength={255} value={values.address1} onChange={(event) => onChange('address1', event.target.value)} className="mt-1" placeholder="Address line 1" />
-        <Input maxLength={255} value={values.address2} onChange={(event) => onChange('address2', event.target.value)} className="mt-2" placeholder="Address line 2 (optional)" />
+        <Input maxLength={255} value={values.address1 ?? ''} onChange={(event) => onChange('address1', event.target.value)} className="mt-1" placeholder="Address line 1" />
+        <Input maxLength={255} value={values.address2 ?? ''} onChange={(event) => onChange('address2', event.target.value)} className="mt-2" placeholder="Address line 2 (optional)" />
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Description
-        <Textarea rows={3} value={values.description} onChange={(event) => onChange('description', event.target.value)} className="mt-1" />
+        <Textarea rows={3} value={values.description ?? ''} onChange={(event) => onChange('description', event.target.value)} className="mt-1" />
       </label>
       <label className="block text-xs font-medium text-slate-600">
         Internal note
-        <Textarea rows={3} value={values.note} onChange={(event) => onChange('note', event.target.value)} className="mt-1" />
+        <Textarea rows={3} value={values.note ?? ''} onChange={(event) => onChange('note', event.target.value)} className="mt-1" />
       </label>
     </div>
   );
@@ -323,7 +329,8 @@ export function VendorsPage() {
       setNameError('Vendor name must be 255 characters or fewer.');
       return;
     }
-    if (formValues.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formValues.email.trim())) {
+    const email = (formValues.email ?? '').trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setEmailError('Enter a valid email address.');
       return;
     }
@@ -333,7 +340,7 @@ export function VendorsPage() {
     setNameError('');
     setEmailError('');
     try {
-      const payload = makePayload({ ...formValues, name });
+      const payload = makePayload({ ...formValues, name }, editingVendor !== null);
       const saved = editingVendor
         ? await updateVendor(editingVendor.id, payload)
         : await createVendor(payload);
@@ -404,11 +411,11 @@ export function VendorsPage() {
   }
 
   const vendorRows = loading ? (
-    <tr><td colSpan={5}><FeedbackState tone="loading" title="Loading vendors" description="Fetching vendor records from the POS server." /></td></tr>
+    <tr><td colSpan={6}><FeedbackState tone="loading" title="Loading vendors" description="Fetching vendor records from the POS server." /></td></tr>
   ) : loadError ? (
-    <tr><td colSpan={5}><FeedbackState tone="error" title={authError ? 'Sign-in required' : 'Vendors could not be loaded'} description={authError ? 'Sign in with a valid POS account to view vendors.' : loadError} action={<Button variant="secondary" onClick={refresh}>Retry</Button>} /></td></tr>
+    <tr><td colSpan={6}><FeedbackState tone="error" title={authError ? 'Sign-in required' : 'Vendors could not be loaded'} description={authError ? 'Sign in with a valid POS account to view vendors.' : loadError} action={<Button variant="secondary" onClick={refresh}>Retry</Button>} /></td></tr>
   ) : vendors.length === 0 ? (
-    <tr><td colSpan={5}><FeedbackState tone="empty" title={search ? 'No matching vendors' : 'No vendors yet'} description={search ? 'Try another vendor name, company, email, or phone.' : 'Add suppliers your shop buys stock from.'} action={!search ? <Button onClick={openCreate}><Plus size={16} />Add vendor</Button> : undefined} /></td></tr>
+    <tr><td colSpan={6}><FeedbackState tone="empty" title={search ? 'No matching vendors' : 'No vendors yet'} description={search ? 'Try another vendor name, company, email, or phone.' : 'Add suppliers your shop buys stock from.'} action={!search ? <Button onClick={openCreate}><Plus size={16} />Add vendor</Button> : undefined} /></td></tr>
   ) : (
     vendors.map((vendor) => (
       <tr key={vendor.id} className="text-sm text-slate-600">
@@ -426,6 +433,9 @@ export function VendorsPage() {
           {vendor.phone2 && <p className="mt-0.5 text-xs text-slate-400">{vendor.phone2}</p>}
         </td>
         <td className="px-4 py-3.5">{vendor.email || '—'}</td>
+        <td className="max-w-56 truncate px-4 py-3.5" title={[vendor.address1, vendor.address2].filter(Boolean).join(', ')}>
+          {[vendor.address1, vendor.address2].filter(Boolean).join(', ') || '—'}
+        </td>
         <td className="px-4 py-3.5"><StatusBadge tone={vendor.isActive ? 'success' : 'neutral'}>{vendor.isActive ? 'Active' : 'Inactive'}</StatusBadge></td>
         <td className="px-4 py-3.5 last:pr-5">
           <div className="flex items-center justify-end gap-1">
@@ -466,7 +476,7 @@ export function VendorsPage() {
       {actionError && <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><span className="flex items-center gap-2"><AlertCircle size={17} />{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError('')} className="text-rose-700">Dismiss</button></div>}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <Table headers={['Vendor', 'Phone', 'Email', 'Status', 'Actions']} caption="Vendors">
+        <Table headers={['Vendor', 'Phone', 'Email', 'Address', 'Status', 'Actions']} caption="Vendors">
           {vendorRows}
         </Table>
         {!loading && !loadError && meta.total > 0 && <div className="border-t border-slate-100 px-4 py-3"><Pagination page={page} totalPages={meta.totalPages} totalItems={meta.total} pageSize={PAGE_SIZE} onPageChange={setPage} /></div>}

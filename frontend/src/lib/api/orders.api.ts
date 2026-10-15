@@ -36,6 +36,7 @@ export interface OrderQuery {
   page: number;
   limit: number;
   search?: string;
+  customerId?: string;
 }
 
 export interface InvoicePayment {
@@ -68,6 +69,7 @@ export function listOrders(query: OrderQuery, signal?: AbortSignal) {
       page: query.page,
       limit: query.limit,
       search: query.search,
+      customerId: query.customerId,
     })}`,
     { signal },
   );

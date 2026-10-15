@@ -415,13 +415,14 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
             "url": {
-              "raw": "{{baseUrl}}/orders?page=1&limit=10&search=",
+              "raw": "{{baseUrl}}/orders?page=1&limit=10&search=&customerId=",
               "host": ["{{baseUrl}}"],
               "path": ["orders"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "search", "value": "" }
+                { "key": "search", "value": "" },
+                { "key": "customerId", "value": "" }
               ]
             }
           }

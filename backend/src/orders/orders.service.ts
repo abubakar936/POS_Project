@@ -96,7 +96,12 @@ export class OrdersService {
     });
   }
 
-  async findAll(query: { page?: number; limit?: number; search?: string }) {
+  async findAll(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    customerId?: string;
+  }) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
     const qb = this.orderRepo
@@ -110,6 +115,11 @@ export class OrdersService {
         '(order.orderNumber ILIKE :search OR order.customerName ILIKE :search OR order.customerPhone ILIKE :search)',
         { search: `%${query.search}%` },
       );
+    }
+    if (query.customerId) {
+      qb.andWhere('order.customerId = :customerId', {
+        customerId: query.customerId,
+      });
     }
 
     const [data, total] = await qb

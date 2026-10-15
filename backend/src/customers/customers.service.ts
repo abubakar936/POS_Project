@@ -24,7 +24,7 @@ export class CustomersService {
 
     if (query.search) {
       qb.andWhere(
-        '(customer.first_name ILIKE :s OR customer.last_name ILIKE :s OR customer.full_name ILIKE :s OR customer.email ILIKE :s)',
+        '(customer.first_name ILIKE :s OR customer.last_name ILIKE :s OR customer.full_name ILIKE :s OR customer.email ILIKE :s OR customer.phone ILIKE :s OR customer.alternate_phone ILIKE :s)',
         { s: `%${query.search}%` },
       );
     }
