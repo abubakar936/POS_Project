@@ -1,4 +1,5 @@
 import type { Product, ProductPayload } from '../../lib/api/products.types';
+import { isKnownMeasuringUnit } from '../../lib/api/measurement-units';
 
 export interface ProductFormValues {
   name: string;
@@ -9,6 +10,7 @@ export interface ProductFormValues {
   companyId: string;
   vendorId: string;
   measuringUnit: string;
+  measuringUnitCustom: boolean;
   packSize: string;
   pcsPerCarton: string;
   retailPrice: string;
@@ -30,6 +32,7 @@ export const emptyProductFormValues: ProductFormValues = {
   companyId: '',
   vendorId: '',
   measuringUnit: '',
+  measuringUnitCustom: false,
   packSize: '',
   pcsPerCarton: '',
   retailPrice: '',
@@ -52,6 +55,8 @@ export function productToFormValues(product: Product): ProductFormValues {
     companyId: product.companyId ?? '',
     vendorId: product.vendorId ?? '',
     measuringUnit: product.measuringUnit ?? '',
+    measuringUnitCustom:
+      Boolean(product.measuringUnit) && !isKnownMeasuringUnit(product.measuringUnit ?? ''),
     packSize: product.packSize ?? '',
     pcsPerCarton: product.pcsPerCarton?.toString() ?? '',
     retailPrice: product.retailPrice ?? '',
@@ -77,7 +82,9 @@ export function validateProductForm(
   if (values.barcode.trim().length > 100) {
     errors.barcode = 'Barcode must be 100 characters or fewer.';
   }
-  if (values.measuringUnit.trim().length > 50) {
+  if (values.measuringUnitCustom && !values.measuringUnit.trim()) {
+    errors.measuringUnit = 'Enter a custom measuring unit.';
+  } else if (values.measuringUnit.trim().length > 50) {
     errors.measuringUnit = 'Measuring unit must be 50 characters or fewer.';
   }
   if (values.packSize.trim().length > 100) {

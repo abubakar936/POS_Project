@@ -522,12 +522,12 @@ export function VendorsPage() {
               <div className="mb-2 flex items-end justify-between gap-3"><div><h3 className="text-sm font-semibold text-slate-800">Linked stock receipts</h3><p className="mt-0.5 text-xs text-slate-500">Stock records referencing this vendor; not an accounting purchase ledger.</p></div><span className="text-xs text-slate-500">{stockLoading ? 'Loading…' : `${stockMeta.total.toLocaleString()} records`}</span></div>
               {stockLoading ? <FeedbackState tone="loading" title="Loading linked stock receipts" /> : stockError ? <FeedbackState tone="error" title="Stock receipts could not be loaded" description={stockError} /> : stockRecords.length === 0 ? <FeedbackState tone="empty" title="No linked stock receipts" description="No active stock lots were returned for this vendor." /> : (
                 <div className="overflow-hidden rounded-lg border border-slate-200">
-                  <Table headers={['Product / lot', 'Received', 'Remaining', 'Purchase cost', 'Purchase date']} caption="Vendor-linked stock receipt records">
+                  <Table headers={['Product / lot', 'Received', 'Remaining', 'Buy price', 'Purchase date']} caption="Vendor-linked stock receipt records">
                     {stockRecords.map((record) => (
                       <tr key={record.id} className="text-xs text-slate-600">
                         <td className="px-3 py-2.5"><p className="font-medium text-slate-800">{record.product?.name || 'Product unavailable'}</p><p className="mt-0.5 font-mono text-[10px] text-slate-400">{record.product?.sku || record.id}</p></td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{record.quantity}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{record.remainingQuantity}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{record.quantity}{record.product?.measuringUnit ? ` ${record.product.measuringUnit}` : ''}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{record.remainingQuantity}{record.product?.measuringUnit ? ` ${record.product.measuringUnit}` : ''}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums">{formatRupees(record.purchasePrice)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(record.purchaseDate ?? record.createdAt)}</td>
                       </tr>

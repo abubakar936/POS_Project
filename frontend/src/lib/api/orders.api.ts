@@ -63,6 +63,35 @@ export interface OrderInvoice {
   payments: InvoicePayment[];
 }
 
+export interface CreateSalePayload {
+  clientRequestId: string;
+  createInvoice: true;
+  walkInCustomer: boolean;
+  customerId?: string;
+  discountAmount: string;
+  payment?: {
+    amount: string;
+    paymentMethod: 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
+  };
+  items: Array<{
+    productId: string;
+    stockId: string;
+    quantity: string;
+    salePrice?: string;
+  }>;
+}
+
+export interface CompletedSale extends OrderRecord {
+  invoice: OrderInvoice & { createdAt: string };
+}
+
+export function createSale(payload: CreateSalePayload) {
+  return apiRequest<CompletedSale>('/orders', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
 export function listOrders(query: OrderQuery, signal?: AbortSignal) {
   return apiRequest<PageResult<OrderRecord>>(
     `/orders${encodeQuery({

@@ -35,6 +35,7 @@ import {
   type InventoryStockRecord,
 } from '../../lib/api/stocks.api';
 import type { Product } from '../../lib/api/products.types';
+import { isWholeQuantityUnit } from '../../lib/api/measurement-units';
 
 const PAGE_SIZE = 20;
 
@@ -153,21 +154,35 @@ function getInventoryStatus(item: InventoryProduct) {
   return { label: 'In stock', tone: 'success' as const };
 }
 
-function validateStockForm(values: StockFormValues): Record<string, string> {
+function validateStockForm(
+  values: StockFormValues,
+  measuringUnit?: string | null,
+): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!values.productId) errors.productId = 'Select a product.';
   if (!isNonNegativeDecimal(values.quantity) || Number(values.quantity) <= 0) {
     errors.quantity = 'Quantity must be greater than zero.';
+  } else if (
+    isWholeQuantityUnit(measuringUnit) &&
+    !/^\d+(?:\.0+)?$/.test(values.quantity)
+  ) {
+    errors.quantity = 'Quantity must be a whole number for this measuring unit.';
   }
   if (!values.locationType.trim()) errors.locationType = 'Enter a location type.';
   if (!isNonNegativeDecimal(values.purchasePrice)) {
-    errors.purchasePrice = 'Enter a valid non-negative purchase price.';
+    errors.purchasePrice = 'Enter a valid non-negative buy price.';
   }
   if (!isNonNegativeDecimal(values.salePrice)) {
     errors.salePrice = 'Enter a valid non-negative selling price.';
   }
   if (values.minimumQuantity && !isNonNegativeDecimal(values.minimumQuantity)) {
     errors.minimumQuantity = 'Enter a valid non-negative threshold.';
+  } else if (
+    values.minimumQuantity &&
+    isWholeQuantityUnit(measuringUnit) &&
+    !/^\d+(?:\.0+)?$/.test(values.minimumQuantity)
+  ) {
+    errors.minimumQuantity = 'Threshold must be a whole number for this measuring unit.';
   }
   if (values.printedPrice && !isNonNegativeDecimal(values.printedPrice)) {
     errors.printedPrice = 'Enter a valid non-negative printed price.';
@@ -368,7 +383,7 @@ export function StocksPage() {
 
   function requestConfirmation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const errors = validateStockForm(values);
+    const errors = validateStockForm(values, products.find((product) => product.id === values.productId)?.measuringUnit);
     setFieldErrors(errors);
     setSubmitError('');
     if (Object.keys(errors).length) return;
@@ -380,13 +395,14 @@ export function StocksPage() {
     setSubmitError('');
     try {
       const result = await createStock(stockFormToPayload(values));
+      const product = result.product ?? products.find((item) => item.id === result.productId);
       setConfirmOpen(false);
       setFormOpen(false);
       setValues(emptyForm);
       showToast({
         tone: 'success',
         title: 'Stock added',
-        description: `${result.product?.name ?? products.find((product) => product.id === result.productId)?.name ?? 'Product'} · ${formatQuantity(parseQuantity(result.quantity))} units received.`,
+        description: `${product?.name ?? 'Product'} · ${formatQuantity(parseQuantity(result.quantity))}${product?.measuringUnit ? ` ${product.measuringUnit}` : ' units'} received.`,
       });
       setReloadToken((current) => current + 1);
     } catch (error) {
@@ -479,7 +495,7 @@ export function StocksPage() {
             <SummaryCard label="Low stock" value={loading ? '—' : lowStockCount.toLocaleString()} icon={<TriangleAlert size={18} />} tone="warning" />
             <SummaryCard label="Out of stock" value={loading ? '—' : outOfStockCount.toLocaleString()} icon={<AlertCircle size={18} />} tone="danger" />
             <SummaryCard label="Negative stock" value={loading ? '—' : negativeStockCount.toLocaleString()} icon={<AlertCircle size={18} />} tone="danger" />
-            <SummaryCard label="On-hand cost value" value={loading ? '—' : formatRupeesFromCents(totalStockValueCents)} icon={<Boxes size={18} />} />
+            <SummaryCard label="On-hand buy value" value={loading ? '—' : formatRupeesFromCents(totalStockValueCents)} icon={<Boxes size={18} />} />
           </div>
 
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -512,7 +528,7 @@ export function StocksPage() {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <Table headers={['Product / lot', 'Category', 'Available', 'Purchase / sale price', 'On-hand cost value', 'Stock status', 'Location / supplier', 'Actions']} caption="Stock inventory by receipt lot">
+            <Table headers={['Product / lot', 'Category', 'Available', 'Buy / selling price', 'On-hand buy value', 'Stock status', 'Location / supplier', 'Actions']} caption="Stock inventory by receipt lot">
               {loading ? (
                 <tr><td colSpan={8}><FeedbackState tone="loading" title="Loading inventory" description="Fetching products and stock records." /></td></tr>
               ) : visibleInventory.length === 0 ? (
@@ -540,7 +556,7 @@ export function StocksPage() {
                     <td className="px-4 py-3.5">
                       {record ? (
                         <>
-                          <p>Cost: <span className="font-medium tabular-nums text-slate-800">{formatRupees(record.purchasePrice)}</span></p>
+                          <p>Buy price: <span className="font-medium tabular-nums text-slate-800">{formatRupees(record.purchasePrice)}</span></p>
                           <p className="mt-1">Sell: <span className="font-medium tabular-nums text-slate-800">{formatRupees(record.salePrice)}</span></p>
                         </>
                       ) : '—'}
@@ -550,7 +566,7 @@ export function StocksPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-                      {item.hasMinimum && <p className="mt-1 text-[10px] text-slate-400">Product threshold {formatQuantityHundredths(item.minimumQuantityHundredths)}</p>}
+                      {item.hasMinimum && <p className="mt-1 text-[10px] text-slate-400">Product threshold {formatQuantityHundredths(item.minimumQuantityHundredths)}{item.product.measuringUnit ? ` ${item.product.measuringUnit}` : ''}</p>}
                     </td>
                     <td className="px-4 py-3.5">
                       {record ? <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><MapPin size={13} />{location}{supplier ? ` · ${supplier}` : ''}</span> : '—'}
@@ -577,9 +593,9 @@ export function StocksPage() {
             <p>
               Low stock is determined from the product’s total remaining quantity
               compared with the largest configured product threshold across its
-              lots. On-hand cost value is the sum of each lot’s remaining
-              quantity multiplied by its recorded purchase price. Editing a
-              lot’s sale price does not change its purchase cost. The backend
+              lots. On-hand buy value is the sum of each lot’s remaining
+              quantity multiplied by its recorded buy price. Editing a
+              lot’s sale price does not change its buy price. The backend
               has no stock movement/history, adjustment, reason, or notes API.
             </p>
           </div>
@@ -601,13 +617,13 @@ export function StocksPage() {
             </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Received quantity" error={fieldErrors.quantity}>
-              <Input id="stock-quantity" type="number" min="0.01" step="0.01" required value={values.quantity} onChange={(event) => setField('quantity', event.target.value)} />
+            <FormField label={`Received quantity${selectedProduct?.measuringUnit ? ` (${selectedProduct.measuringUnit})` : ''}`} error={fieldErrors.quantity}>
+              <Input id="stock-quantity" type="number" min="0.01" step={selectedProduct && isWholeQuantityUnit(selectedProduct.measuringUnit) ? '1' : '0.01'} required value={values.quantity} onChange={(event) => setField('quantity', event.target.value)} />
             </FormField>
-            <FormField label="Low-stock threshold (optional)" error={fieldErrors.minimumQuantity}>
-              <Input id="stock-minimum" type="number" min="0" step="0.01" value={values.minimumQuantity} onChange={(event) => setField('minimumQuantity', event.target.value)} />
+            <FormField label={`Low-stock threshold (optional)${selectedProduct?.measuringUnit ? ` (${selectedProduct.measuringUnit})` : ''}`} error={fieldErrors.minimumQuantity}>
+              <Input id="stock-minimum" type="number" min="0" step={selectedProduct && isWholeQuantityUnit(selectedProduct.measuringUnit) ? '1' : '0.01'} value={values.minimumQuantity} onChange={(event) => setField('minimumQuantity', event.target.value)} />
             </FormField>
-            <FormField label="Purchase price per unit" error={fieldErrors.purchasePrice}>
+            <FormField label="Buy price per unit" error={fieldErrors.purchasePrice}>
               <Input id="stock-purchase-price" type="number" min="0" step="0.01" required value={values.purchasePrice} onChange={(event) => setField('purchasePrice', event.target.value)} />
             </FormField>
             <FormField label="Selling price per unit" error={fieldErrors.salePrice}>
@@ -656,7 +672,7 @@ export function StocksPage() {
         open={priceEditStock !== null}
         onClose={() => { if (!priceSaving) setPriceEditStock(null); }}
         title="Update lot selling price"
-        description="Purchase cost is kept as the original recorded acquisition cost."
+        description="The original buy price for each stock lot is preserved."
       >
         <form onSubmit={saveSalePrice} className="space-y-4">
           {priceEditError && (
@@ -669,7 +685,7 @@ export function StocksPage() {
               {products.find((product) => product.id === priceEditStock?.productId)?.name ?? 'Selected product'}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Purchase cost: {formatRupees(priceEditStock?.purchasePrice)} per unit
+              Buy price: {formatRupees(priceEditStock?.purchasePrice)} per unit
             </p>
           </div>
           <FormField label="Selling price per unit">
@@ -699,7 +715,7 @@ export function StocksPage() {
       <ConfirmDialog
         open={confirmOpen}
         title="Confirm stock receipt"
-        description={`${selectedProduct?.name ?? 'Selected product'} · ${values.quantity || '0'} units · purchase ${formatRupees(values.purchasePrice)} per unit · selling ${formatRupees(values.salePrice)} per unit. This creates a stock lot using the backend stock API.`}
+        description={`${selectedProduct?.name ?? 'Selected product'} · ${values.quantity || '0'}${selectedProduct?.measuringUnit ? ` ${selectedProduct.measuringUnit}` : ' units'} · buy ${formatRupees(values.purchasePrice)} per unit · selling ${formatRupees(values.salePrice)} per unit. This creates a stock lot using the backend stock API.`}
         confirmLabel="Add stock"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => void submitStock()}
@@ -708,7 +724,7 @@ export function StocksPage() {
       <ConfirmDialog
         open={priceConfirmOpen}
         title="Confirm selling price update"
-        description={`Change this lot’s selling price from ${formatRupees(priceEditStock?.salePrice)} to ${formatRupees(priceEditValue)} per unit? Its purchase cost and stock quantity will not change.`}
+        description={`Change this lot’s selling price from ${formatRupees(priceEditStock?.salePrice)} to ${formatRupees(priceEditValue)} per unit? Its buy price and stock quantity will not change.`}
         confirmLabel="Update selling price"
         onCancel={() => setPriceConfirmOpen(false)}
         onConfirm={() => void confirmSalePriceUpdate()}

@@ -20,6 +20,7 @@ import type {
   VendorOption,
 } from '../../lib/api/catalog.types';
 import { createProduct, getProduct, updateProduct } from '../../lib/api/products.api';
+import { MEASURING_UNITS, isKnownMeasuringUnit } from '../../lib/api/measurement-units';
 import {
   emptyProductFormValues,
   productFormToPayload,
@@ -208,8 +209,60 @@ export function ProductFormPage() {
           <Field label="Barcode" hint="Optional barcode value." error={fieldErrors.barcode}>
             <Input id="barcode" value={values.barcode} onChange={(event) => updateField('barcode', event.target.value)} aria-invalid={Boolean(fieldErrors.barcode)} />
           </Field>
-          <Field label="Measuring unit" hint="For example, pair, piece, box or kg." error={fieldErrors.measuringUnit}>
-            <Input id="measuringUnit" value={values.measuringUnit} onChange={(event) => updateField('measuringUnit', event.target.value)} aria-invalid={Boolean(fieldErrors.measuringUnit)} />
+          <Field label="Measuring unit" hint="Fractional quantities are allowed for weight, volume, length and custom units." error={fieldErrors.measuringUnit}>
+            <Select
+              id="measuringUnit"
+              value={values.measuringUnitCustom ? '__custom__' : values.measuringUnit}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === '__custom__') {
+                  setValues((current) => ({
+                    ...current,
+                    measuringUnit: current.measuringUnitCustom ? current.measuringUnit : '',
+                    measuringUnitCustom: true,
+                  }));
+                  setFieldErrors((current) => {
+                    if (!current.measuringUnit) return current;
+                    const next = { ...current };
+                    delete next.measuringUnit;
+                    return next;
+                  });
+                } else {
+                  setValues((current) => ({
+                    ...current,
+                    measuringUnit: value,
+                    measuringUnitCustom: false,
+                  }));
+                  setFieldErrors((current) => {
+                    if (!current.measuringUnit) return current;
+                    const next = { ...current };
+                    delete next.measuringUnit;
+                    return next;
+                  });
+                }
+              }}
+              aria-invalid={Boolean(fieldErrors.measuringUnit)}
+            >
+              <option value="">No unit selected</option>
+              {values.measuringUnit && !values.measuringUnitCustom && !isKnownMeasuringUnit(values.measuringUnit) && (
+                <option value={values.measuringUnit}>{values.measuringUnit} (existing unit)</option>
+              )}
+              {MEASURING_UNITS.map((unit) => (
+                <option key={unit.value} value={unit.value}>{unit.label}</option>
+              ))}
+              <option value="__custom__">Other (custom unit)</option>
+            </Select>
+            {values.measuringUnitCustom && (
+              <Input
+                id="customMeasuringUnit"
+                value={values.measuringUnit}
+                onChange={(event) => updateField('measuringUnit', event.target.value)}
+                placeholder="Enter custom unit"
+                maxLength={50}
+                aria-label="Custom measuring unit"
+                aria-invalid={Boolean(fieldErrors.measuringUnit)}
+              />
+            )}
           </Field>
           <Field label="Pack size" hint="Optional package size." error={fieldErrors.packSize}>
             <Input id="packSize" value={values.packSize} onChange={(event) => updateField('packSize', event.target.value)} aria-invalid={Boolean(fieldErrors.packSize)} />
@@ -254,7 +307,7 @@ export function ProductFormPage() {
         </FormSection>
 
         <FormSection title="Pricing" description="Amounts are submitted as decimal strings to match the API.">
-          <PriceField id="purchasePrice" label="Cost price" value={values.purchasePrice} onChange={(value) => updateField('purchasePrice', value)} error={fieldErrors.purchasePrice} />
+          <PriceField id="purchasePrice" label="Buy price" value={values.purchasePrice} onChange={(value) => updateField('purchasePrice', value)} error={fieldErrors.purchasePrice} />
           <PriceField id="salePrice" label="Selling price" value={values.salePrice} onChange={(value) => updateField('salePrice', value)} error={fieldErrors.salePrice} />
           <PriceField id="retailPrice" label="Retail price" value={values.retailPrice} onChange={(value) => updateField('retailPrice', value)} error={fieldErrors.retailPrice} />
           <div className="space-y-3">
@@ -272,16 +325,19 @@ export function ProductFormPage() {
           </Field>
           <div className="space-y-3 md:col-span-2">
             <label className="flex items-center gap-2.5 text-sm text-slate-700">
+              <input type="checkbox" checked={values.isActive} onChange={(event) => updateField('isActive', event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+              Product is active
+            </label>
+            <p className="text-xs text-slate-500">
+              Opening stock, on-hand quantity and low-stock thresholds are managed in{' '}
+              <Link to="/stocks" className="font-medium text-teal-700 hover:text-teal-800">Stock / Inventory</Link>,
+              separately from product information.
+            </p>
+            <label className="flex items-center gap-2.5 text-sm text-slate-700">
               <input type="checkbox" checked={values.hasVariants} onChange={(event) => updateField('hasVariants', event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
               This product has variants
             </label>
             <p className="ml-6 text-xs text-slate-500">The API stores this flag; variant definitions are not currently supported by the backend.</p>
-            {isEdit && (
-              <label className="flex items-center gap-2.5 text-sm text-slate-700">
-                <input type="checkbox" checked={values.isActive} onChange={(event) => updateField('isActive', event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
-                Product is active
-              </label>
-            )}
           </div>
         </FormSection>
 

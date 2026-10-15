@@ -6,6 +6,7 @@ import { CreateStockDto } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { UpdateStockSalePriceDto } from './dto/update-stock-sale-price.dto';
 import { Product } from '../products/product.entity';
+import { isValidQuantityForUnit } from '../common/measurement-unit.util';
 
 @Injectable()
 export class StocksService {
@@ -19,6 +20,15 @@ export class StocksService {
   async create(dto: CreateStockDto) {
     const product = await this.productRepo.findOne({ where: { id: dto.productId, deletedAt: IsNull() } });
     if (!product) throw new BadRequestException('Product not found');
+    if (!isValidQuantityForUnit(dto.quantity, product.measuringUnit)) {
+      throw new BadRequestException('Quantity must be a whole number for this measuring unit');
+    }
+    if (
+      dto.minimumQuantity !== undefined &&
+      !isValidQuantityForUnit(dto.minimumQuantity, product.measuringUnit)
+    ) {
+      throw new BadRequestException('Low-stock threshold must be a whole number for this measuring unit');
+    }
 
     if (!dto.vendorId && !dto.companyId) {
       throw new BadRequestException('Either vendorId or companyId must be provided');
@@ -97,9 +107,16 @@ export class StocksService {
     const stock = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!stock) throw new NotFoundException('Stock not found');
 
-    if (dto.productId) {
-      const product = await this.productRepo.findOne({ where: { id: dto.productId, deletedAt: IsNull() } });
-      if (!product) throw new BadRequestException('Product not found');
+    const productId = dto.productId ?? stock.productId;
+    const product = await this.productRepo.findOne({
+      where: { id: productId, deletedAt: IsNull() },
+    });
+    if (!product) throw new BadRequestException('Product not found');
+    if (
+      dto.minimumQuantity !== undefined &&
+      !isValidQuantityForUnit(dto.minimumQuantity, product.measuringUnit)
+    ) {
+      throw new BadRequestException('Low-stock threshold must be a whole number for this measuring unit');
     }
 
     if (!dto.vendorId && !dto.companyId && !stock.vendorId && !stock.companyId) {

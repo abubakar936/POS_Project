@@ -15,6 +15,7 @@ import {
   parseScaledDecimal,
 } from '../common/decimal.util';
 import { Invoice } from '../invoices/invoice.entity';
+import { InvoicePayment } from '../invoices/invoice-payment.entity';
 import { Product } from '../products/product.entity';
 import { Stock } from '../stock/stock.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -22,6 +23,9 @@ import { CreateOrderItemDto } from './dto/create-order-item.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderItem } from './order-item.entity';
 import { Order } from './order.entity';
+import { isValidQuantityForUnit } from '../common/measurement-unit.util';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { Role } from '../users/enums/role.enum';
 
 interface PreparedItem {
   product: Product;
@@ -40,10 +44,55 @@ export class OrdersService {
     private readonly orderRepo: Repository<Order>,
   ) {}
 
-  async create(dto: CreateOrderDto) {
+  async create(dto: CreateOrderDto, user: JwtPayload) {
     return this.dataSource.transaction(async (manager) => {
+      if (dto.payment && !dto.createInvoice) {
+        throw new BadRequestException('Payments require invoice creation');
+      }
+      if (
+        dto.createInvoice &&
+        ((!dto.customerId && dto.walkInCustomer !== true) ||
+          (Boolean(dto.customerId) && dto.walkInCustomer === true))
+      ) {
+        throw new BadRequestException(
+          'Select an existing customer or explicitly select Walk-in Customer',
+        );
+      }
+      const orderNumber = `ORD-${(dto.clientRequestId ?? randomUUID()).toUpperCase()}`;
+      if (dto.clientRequestId) {
+        await manager.query(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          [orderNumber],
+        );
+        const existing = await manager.getRepository(Order).findOne({
+          withDeleted: true,
+          where: { orderNumber },
+        });
+        if (existing) {
+          if (existing.deletedAt) {
+            throw new ConflictException(
+              'This sale request was already completed and then deleted',
+            );
+          }
+          const order = await this.findOneWithManager(manager, existing.id);
+          if (!dto.createInvoice) return order;
+          const invoice = await manager.getRepository(Invoice).findOne({
+            withDeleted: true,
+            where: { orderId: existing.id },
+          });
+          if (!invoice || invoice.deletedAt) {
+            throw new ConflictException(
+              'The sale already exists but its invoice is unavailable',
+            );
+          }
+          return {
+            ...order,
+            invoice: await this.findInvoiceWithManager(manager, invoice.id),
+          };
+        }
+      }
       const customer = await this.resolveCustomer(manager, dto.customerId);
-      const items = await this.prepareItems(manager, dto.items);
+      const items = await this.prepareItems(manager, dto.items, undefined, user);
       const requestedByStock = this.sumQuantitiesByStock(items);
       const stocks = [
         ...new Map(items.map((item) => [item.stock.id, item.stock])).values(),
@@ -57,7 +106,7 @@ export class OrdersService {
       await this.adjustStock(manager, stocks, requestedByStock, -1n);
 
       const order = manager.getRepository(Order).create({
-        orderNumber: `ORD-${randomUUID().toUpperCase()}`,
+        orderNumber,
         customerId: customer?.id ?? null,
         customer,
         customerName: customer
@@ -92,7 +141,48 @@ export class OrdersService {
         ),
       );
 
-      return this.findOneWithManager(manager, savedOrder.id);
+      const saved = await this.findOneWithManager(manager, savedOrder.id);
+      if (!dto.createInvoice) return saved;
+
+      const invoiceRepo = manager.getRepository(Invoice);
+      const invoice = await invoiceRepo.save(
+        invoiceRepo.create({
+          invoiceNumber: `INV-${randomUUID().toUpperCase()}`,
+          orderId: savedOrder.id,
+          customerId: savedOrder.customerId ?? null,
+          customerName: savedOrder.customerName ?? null,
+          customerPhone: savedOrder.customerPhone ?? null,
+          customerAddress: savedOrder.customerAddress ?? null,
+          subtotal: savedOrder.subtotal,
+          discountAmount: savedOrder.discountAmount,
+          itemDiscountAmount: savedOrder.itemDiscountAmount,
+          totalAmount: savedOrder.totalAmount,
+          note: savedOrder.note ?? null,
+        }),
+      );
+      if (dto.payment) {
+        const paymentAmount = parseScaledDecimal(dto.payment.amount, 2);
+        const invoiceTotal = parseScaledDecimal(invoice.totalAmount, 2);
+        if (paymentAmount <= 0n || paymentAmount > invoiceTotal) {
+          throw new BadRequestException(
+            'Payment amount must be greater than zero and cannot exceed the sale total',
+          );
+        }
+        const paymentRepo = manager.getRepository(InvoicePayment);
+        await paymentRepo.save(
+          paymentRepo.create({
+            invoiceId: invoice.id,
+            amount: dto.payment.amount,
+            paymentMethod: dto.payment.paymentMethod,
+            reference: dto.payment.reference ?? null,
+            note: dto.payment.note ?? null,
+          }),
+        );
+      }
+      return {
+        ...saved,
+        invoice: await this.findInvoiceWithManager(manager, invoice.id),
+      };
     });
   }
 
@@ -146,6 +236,39 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  private async findInvoiceWithManager(manager: EntityManager, id: string) {
+    const invoice = await manager
+      .getRepository(Invoice)
+      .createQueryBuilder('invoice')
+      .leftJoinAndSelect('invoice.order', 'order')
+      .leftJoinAndSelect('order.items', 'item')
+      .where('invoice.id = :id', { id })
+      .getOne();
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    const payments = await manager.getRepository(InvoicePayment).find({
+      where: { invoiceId: id },
+      order: { createdAt: 'ASC' },
+    });
+    const amountPaid = payments.reduce(
+      (sum, payment) => sum + parseScaledDecimal(payment.amount, 2),
+      0n,
+    );
+    const balanceDue = parseScaledDecimal(invoice.totalAmount, 2) - amountPaid;
+    return {
+      ...invoice,
+      payments,
+      amountPaid: formatScaledDecimal(amountPaid, 2),
+      balanceDue: formatScaledDecimal(balanceDue, 2),
+      status:
+        balanceDue === 0n
+          ? 'PAID'
+          : amountPaid === 0n
+            ? 'UNPAID'
+            : 'PARTIALLY_PAID',
+    };
   }
 
   async update(id: string, dto: UpdateOrderDto) {
@@ -294,6 +417,7 @@ export class OrdersService {
     manager: EntityManager,
     requestedItems: CreateOrderItemDto[],
     lockedStocks?: Stock[],
+    user?: JwtPayload,
   ): Promise<PreparedItem[]> {
     const stockIds = [...new Set(requestedItems.map((item) => item.stockId))];
     const stocks = lockedStocks ?? (await this.lockStocks(manager, stockIds));
@@ -325,7 +449,20 @@ export class OrdersService {
       const quantity = parseScaledDecimal(requested.quantity, 2);
       if (quantity <= 0n)
         throw new BadRequestException('Quantity must be greater than zero');
-      const salePrice = parseScaledDecimal(stock.salePrice, 2);
+      if (!isValidQuantityForUnit(requested.quantity, product.measuringUnit)) {
+        throw new BadRequestException(
+          `Quantity must be a whole number for measuring unit ${product.measuringUnit}`,
+        );
+      }
+      if (requested.salePrice !== undefined && user?.role !== Role.Admin) {
+        throw new BadRequestException(
+          'Only administrators may override sale prices',
+        );
+      }
+      const salePrice = parseScaledDecimal(
+        requested.salePrice ?? stock.salePrice,
+        2,
+      );
       const discount = parseScaledDecimal(requested.discountAmount ?? '0', 2);
       const lineTotal = calculateLineTotal(salePrice, quantity, discount);
       if (discount < 0n || lineTotal < 0n) {

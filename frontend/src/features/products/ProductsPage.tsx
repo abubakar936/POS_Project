@@ -276,7 +276,11 @@ export function ProductsPage() {
         <td className="px-4 py-3.5">{product.category?.name || '—'}{product.subCategory?.name && <p className="mt-0.5 text-xs text-slate-400">{product.subCategory.name}</p>}</td>
         <td className="px-4 py-3.5 text-right tabular-nums">{formatRupees(product.salePrice)}</td>
         <td className="px-4 py-3.5 text-right tabular-nums">{formatRupees(product.purchasePrice)}</td>
-        <td className="px-4 py-3.5 text-right tabular-nums">{stockTotals.get(product.id) ?? '—'}</td>
+        <td className="px-4 py-3.5 text-right tabular-nums">
+          {stockTotals.has(product.id)
+            ? `${stockTotals.get(product.id)}${product.measuringUnit ? ` ${product.measuringUnit}` : ''}`
+            : '—'}
+        </td>
         <td className="px-4 py-3.5"><StatusBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Active' : 'Inactive'}</StatusBadge></td>
         <td className="px-4 py-3.5 last:pr-5">
           <div className="flex items-center justify-end gap-1">
@@ -326,7 +330,7 @@ export function ProductsPage() {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <Table
-          headers={['Product', 'SKU / barcode', 'Category', 'Selling price', 'Cost price', 'Stock', 'Status', 'Actions']}
+          headers={['Product', 'SKU / barcode', 'Category', 'Selling price', 'Buy price', 'Stock', 'Status', 'Actions']}
           caption="Product catalog"
         >
           {tableBody}
@@ -365,7 +369,7 @@ export function ProductsPage() {
               <Detail label="Pieces per carton" value={selectedProduct.pcsPerCarton?.toString()} />
               <Detail label="Selling price" value={formatRupees(selectedProduct.salePrice)} />
               <Detail label="Retail price" value={formatRupees(selectedProduct.retailPrice)} />
-              <Detail label="Cost price" value={formatRupees(selectedProduct.purchasePrice)} />
+              <Detail label="Buy price" value={formatRupees(selectedProduct.purchasePrice)} />
               <Detail label="Printed price" value={formatRupees(selectedProduct.printedPrice)} />
               <Detail label="Status" value={selectedProduct.isActive ? 'Active' : 'Inactive'} />
             </dl>
@@ -381,7 +385,7 @@ export function ProductsPage() {
                   {detailStock.map((record) => (
                     <div key={record.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
                       <span className="text-slate-600">{record.locationType}{record.rackLocation ? ` · ${record.rackLocation}` : ''}</span>
-                      <span className="font-medium tabular-nums text-slate-800">{record.remainingQuantity}</span>
+                      <span className="font-medium tabular-nums text-slate-800">{record.remainingQuantity}{selectedProduct.measuringUnit ? ` ${selectedProduct.measuringUnit}` : ''}</span>
                     </div>
                   ))}
                 </div>

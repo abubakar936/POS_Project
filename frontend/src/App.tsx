@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './features/auth/LoginPage';
@@ -14,6 +15,22 @@ import { StocksPage } from './features/stocks/StocksPage';
 import { VendorsPage } from './features/vendors/VendorsPage';
 import { ACCESS_TOKEN_STORAGE_KEY } from './lib/api/client';
 import { CustomersPage } from './features/customers/CustomersPage';
+
+const NewSalePage = lazy(() =>
+  import('./features/orders/NewSalePage').then((module) => ({
+    default: module.NewSalePage,
+  })),
+);
+const ReviewSalePage = lazy(() =>
+  import('./features/orders/ReviewSalePage').then((module) => ({
+    default: module.ReviewSalePage,
+  })),
+);
+const SaleSuccessPage = lazy(() =>
+  import('./features/orders/SaleSuccessPage').then((module) => ({
+    default: module.SaleSuccessPage,
+  })),
+);
 
 function RequireAuthentication() {
   const location = useLocation();
@@ -35,6 +52,9 @@ export default function App() {
           <Route path="products" element={<ProductsPage />} />
           <Route path="products/new" element={<ProductFormPage />} />
           <Route path="products/:id/edit" element={<ProductFormPage />} />
+          <Route path="pos" element={<Suspense fallback={<SalePageLoading />}><NewSalePage /></Suspense>} />
+          <Route path="pos/review" element={<Suspense fallback={<SalePageLoading />}><ReviewSalePage /></Suspense>} />
+          <Route path="pos/success" element={<Suspense fallback={<SalePageLoading />}><SaleSuccessPage /></Suspense>} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="users" element={<UsersPage />} />
@@ -47,4 +67,8 @@ export default function App() {
       </Route>
     </Routes>
   );
+}
+
+function SalePageLoading() {
+  return <div role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Loading sale workspace…</div>;
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, IsBoolean, IsInt, IsNumberString } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsBoolean, IsInt, IsNumberString, MaxLength } from 'class-validator';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -31,6 +31,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   measuringUnit?: string;
 
   @IsOptional()

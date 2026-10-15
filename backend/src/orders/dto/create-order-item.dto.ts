@@ -1,4 +1,9 @@
-import { IsNumberString, IsOptional, IsUUID, Matches } from 'class-validator';
+import {
+  IsNumberString,
+  IsOptional,
+  IsUUID,
+  Matches,
+} from 'class-validator';
 
 const QUANTITY_2_PLACES = /^\d{1,10}(?:\.\d{1,2})?$/;
 const MONEY_2_PLACES = /^\d{1,12}(?:\.\d{1,2})?$/;
@@ -18,4 +23,9 @@ export class CreateOrderItemDto {
   @IsNumberString()
   @Matches(MONEY_2_PLACES)
   discountAmount?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  @Matches(MONEY_2_PLACES)
+  salePrice?: string;
 }

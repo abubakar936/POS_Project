@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { Customer } from '../customers/customer.entity';
 import { Invoice } from '../invoices/invoice.entity';
+import { InvoicePayment } from '../invoices/invoice-payment.entity';
 import { Product } from '../products/product.entity';
 import { Stock } from '../stock/stock.entity';
 import { OrderItem } from './order-item.entity';
@@ -19,6 +20,7 @@ import { OrdersService } from './orders.service';
       Product,
       Stock,
       Invoice,
+      InvoicePayment,
     ]),
     AuthModule,
   ],
