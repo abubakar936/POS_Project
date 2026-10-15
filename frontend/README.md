@@ -101,6 +101,21 @@ The backend currently has no Users create, edit, status, or delete endpoints.
 Its user entity has no name or active-status field, so the page is read-only
 and does not show those values or offer unsupported controls.
 
+## Vendors
+
+The Vendors page uses the authenticated `/vendors` list/detail/create/update
+and soft-delete endpoints. The list supports backend pagination, search by
+vendor name/company/email/primary phone, and active-status filtering. Vendor
+names and emails are not unique in the current backend. Deactivation is
+reversible; soft deletion is offered with a warning because the backend does
+not check linked stock records before deleting.
+
+Vendor details show stock-lot receipts associated with the vendor. The stock
+list supports `vendorId` filtering and paginated results for this view. These
+are the stock records currently available in the backend, not a separate
+purchase ledger; outstanding balances and accounting purchase records are not
+implemented.
+
 ## Categories
 
 The Categories page uses `/categories` pagination, name search, status filtering,

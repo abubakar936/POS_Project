@@ -26,8 +26,20 @@ export class StocksController {
   }
 
   @Get()
-  findAll(@Query() query: any) {
-    return this.svc.findAll(query);
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('productId') productId?: string,
+    @Query('vendorId') vendorId?: string,
+  ) {
+    return this.svc.findAll({
+      page: Number(page),
+      limit: Number(limit),
+      search,
+      productId,
+      vendorId,
+    });
   }
 
   @Get(':id')

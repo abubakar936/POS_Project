@@ -11,6 +11,7 @@ import { OrdersPage } from './features/orders/OrdersPage';
 import { InvoicesPage } from './features/invoices/InvoicesPage';
 import { UsersPage } from './features/users/UsersPage';
 import { StocksPage } from './features/stocks/StocksPage';
+import { VendorsPage } from './features/vendors/VendorsPage';
 import { ACCESS_TOKEN_STORAGE_KEY } from './lib/api/client';
 
 function RequireAuthentication() {
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="stocks" element={<StocksPage />} />
+          <Route path="vendors" element={<VendorsPage />} />
           <Route path="*" element={<PlaceholderPage />} />
         </Route>
       </Route>

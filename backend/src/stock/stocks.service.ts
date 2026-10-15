@@ -54,7 +54,13 @@ export class StocksService {
     return this.repo.save(entity);
   }
 
-  async findAll(query: { page?: number; limit?: number; search?: string; productId?: string }) {
+  async findAll(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    productId?: string;
+    vendorId?: string;
+  }) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
 
@@ -64,6 +70,7 @@ export class StocksService {
     qb.leftJoinAndSelect('s.company', 'company');
 
     if (query.productId) qb.andWhere('s.productId = :productId', { productId: query.productId });
+    if (query.vendorId) qb.andWhere('s.vendorId = :vendorId', { vendorId: query.vendorId });
     if (query.search) qb.andWhere('product.name ILIKE :search', { search: `%${query.search}%` });
 
     const [data, total] = await qb.orderBy('s.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();

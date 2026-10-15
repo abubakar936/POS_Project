@@ -27,6 +27,18 @@ export interface CreateStockPayload {
   companyId?: string;
 }
 
+export function listVendorStockRecords(
+  vendorId: string,
+  page: number,
+  limit: number,
+  signal?: AbortSignal,
+) {
+  return apiRequest<PageResult<InventoryStockRecord>>(
+    `/stocks${encodeQuery({ vendorId, page, limit })}`,
+    { signal },
+  );
+}
+
 async function getAllPages<T>(
   path: string,
   signal?: AbortSignal,
