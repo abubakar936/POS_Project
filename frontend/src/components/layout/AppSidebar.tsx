@@ -3,10 +3,33 @@ import {
   Headset,
   Store,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { getCurrentUserProfile } from '../../lib/api/auth.api';
 import { navigationItems } from './navigation';
 
 export function AppSidebar() {
+  const [canViewUsers, setCanViewUsers] = useState(false);
+  const [roleCheckFailed, setRoleCheckFailed] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getCurrentUserProfile(controller.signal)
+      .then((profile) => {
+        setCanViewUsers(profile.role === 'admin');
+        setRoleCheckFailed(false);
+      })
+      .catch(() => {
+        setCanViewUsers(false);
+        setRoleCheckFailed(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const visibleItems = navigationItems.filter(
+    (item) => item.path !== '/users' || canViewUsers,
+  );
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-slate-950 text-slate-300 md:flex">
       <div className="flex h-[72px] items-center gap-3 border-b border-white/10 px-6">
@@ -27,7 +50,7 @@ export function AppSidebar() {
         <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
           Workspace
         </p>
-        {navigationItems.map(({ label, path, icon: Icon }) => (
+        {visibleItems.map(({ label, path, icon: Icon }) => (
           <NavLink
             key={path}
             to={path}
@@ -55,6 +78,11 @@ export function AppSidebar() {
             )}
           </NavLink>
         ))}
+        {roleCheckFailed && (
+          <p role="status" className="px-3 pt-2 text-[10px] leading-4 text-slate-500">
+            User access could not be verified; the Users menu is hidden.
+          </p>
+        )}
       </nav>
 
       <div className="border-t border-white/10 p-4">

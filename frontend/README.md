@@ -69,6 +69,38 @@ through `PATCH /stocks/:id/sale-price`; recorded purchase cost and on-hand
 quantity cannot be changed through stock update endpoints. Stock movement
 history and adjustments are not available in the current backend.
 
+## Invoices
+
+The Invoices page uses the authenticated `/invoices` and `/orders` APIs. An
+invoice is created from an existing order; the backend assigns its number and
+copies the order's customer and financial snapshots. Duplicate invoices are
+prevented by the backend, and invoice creation does not record a payment.
+Invoice search supports invoice number, linked order number, customer name,
+and phone. Date, customer, and payment-status filters are not available.
+
+Invoice details and browser printing display server-returned order items,
+discounts, totals, due date, and payments. The backend does not expose
+itemized taxes or shop contact/profile details, so the printable copy identifies
+those omissions rather than inventing them. Only invoice note and due date can
+be edited. Payments can be recorded or removed; card/bank payment recording is
+only a local POS record and does not process a charge. The backend permits
+invoice deletion only when no active payments remain, and its duplicate guard
+also counts deleted invoices, so deleting one prevents creating a replacement
+for that order. Invoice cancellation and PDF export are not exposed.
+
+## Users
+
+The Users page uses `GET /users`, which the backend restricts to the `admin`
+role. The sidebar only shows the Users link after `/auth/profile` confirms the
+current user's role; direct requests are still protected by the backend.
+The API returns only email, role, and timestamps for all users. Search, role
+filtering, and pagination are applied client-side because the endpoint does not
+accept those query parameters.
+
+The backend currently has no Users create, edit, status, or delete endpoints.
+Its user entity has no name or active-status field, so the page is read-only
+and does not show those values or offer unsupported controls.
+
 ## Categories
 
 The Categories page uses `/categories` pagination, name search, status filtering,
