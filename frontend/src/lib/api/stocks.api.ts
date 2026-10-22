@@ -16,7 +16,7 @@ export interface CreateStockPayload {
   productId: string;
   quantity: string;
   minimumQuantity?: string;
-  locationType: string;
+  locationType?: string;
   rackLocation?: string;
   purchasePrice: string;
   salePrice: string;

@@ -20,18 +20,14 @@ export class StocksService {
   async create(dto: CreateStockDto) {
     const product = await this.productRepo.findOne({ where: { id: dto.productId, deletedAt: IsNull() } });
     if (!product) throw new BadRequestException('Product not found');
-    if (!isValidQuantityForUnit(dto.quantity, product.measuringUnit)) {
-      throw new BadRequestException('Quantity must be a whole number for this measuring unit');
+    if (!/^(?=.*[1-9])\d{1,10}$/.test(dto.quantity)) {
+      throw new BadRequestException('Quantity must be a positive whole number');
     }
     if (
       dto.minimumQuantity !== undefined &&
       !isValidQuantityForUnit(dto.minimumQuantity, product.measuringUnit)
     ) {
       throw new BadRequestException('Low-stock threshold must be a whole number for this measuring unit');
-    }
-
-    if (!dto.vendorId && !dto.companyId) {
-      throw new BadRequestException('Either vendorId or companyId must be provided');
     }
 
     // validate vendor/company if provided
@@ -50,7 +46,7 @@ export class StocksService {
       quantity: dto.quantity,
       remainingQuantity: dto.quantity,
       minimumQuantity: dto.minimumQuantity ?? null,
-      locationType: dto.locationType,
+      locationType: dto.locationType?.trim() || 'Unspecified',
       rackLocation: dto.rackLocation ?? null,
       purchasePrice: dto.purchasePrice,
       salePrice: dto.salePrice,

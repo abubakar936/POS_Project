@@ -5,19 +5,21 @@ import { Button } from '../../components/ui/Button';
 import { FeedbackState } from '../../components/ui/FeedbackState';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { listCustomers, type CustomerRecord } from '../../lib/api/customers.api';
+import { createCustomer, listCustomers, type CustomerRecord } from '../../lib/api/customers.api';
 import { ApiError } from '../../lib/api/client';
 import { formatRupees } from '../../lib/api/money';
 import { createSale } from '../../lib/api/orders.api';
 import { isWholeQuantityUnit } from '../../lib/api/measurement-units';
 import {
   canAdjustSalePrice,
+  allocateSaleQuantity,
   clearSaleDraft,
   formatCents,
-  lineTotalCents,
   parseMoney,
   parseQuantity,
   readSaleDraft,
+  saleLineHasMixedPrices,
+  saleLineTotalCents,
   saveSaleDraft,
   type SaleCartLine,
   type SaleDraft,
@@ -46,6 +48,7 @@ export function ReviewSalePage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerSaving, setCustomerSaving] = useState(false);
   const [customerError, setCustomerError] = useState('');
   const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
@@ -89,7 +92,7 @@ export function ReviewSalePage() {
 
   const totals = useMemo(() => {
     const subtotal = (draft?.lines ?? []).reduce(
-      (sum, line) => sum + lineTotalCents(line.quantity, line.salePrice),
+      (sum, line) => sum + saleLineTotalCents(line),
       0n,
     );
     const discount = draft ? safeMoney(draft.discountAmount) : 0n;
@@ -171,6 +174,43 @@ export function ReviewSalePage() {
     persist({ ...draft, customerMode: 'walk-in', customerId: null });
   }
 
+  async function resolveCustomerName() {
+    const name = customerSearch.trim();
+    if (!name || customerSaving || draft?.requestPending || finalizing) return;
+    setCustomerSaving(true);
+    setCustomerError('');
+    try {
+      const firstPage = await listCustomers({ page: 1, limit: 100, search: name });
+      let matchingCustomers = firstPage.data;
+      let existing = matchingCustomers.find(
+        (customer) => customerName(customer).toLocaleLowerCase() === name.toLocaleLowerCase(),
+      );
+      for (let page = 2; !existing && page <= firstPage.meta.totalPages; page += 1) {
+        const result = await listCustomers({ page, limit: 100, search: name });
+        matchingCustomers = [...matchingCustomers, ...result.data];
+        existing = result.data.find(
+          (customer) => customerName(customer).toLocaleLowerCase() === name.toLocaleLowerCase(),
+        );
+      }
+      if (existing) {
+        setCustomers(matchingCustomers);
+        setCustomerSearch(customerName(existing));
+        selectCustomer(existing);
+        return;
+      }
+      const created = await createCustomer({ full_name: name });
+      setCustomers((current) => [created, ...current.filter((customer) => customer.id !== created.id)]);
+      setCustomerSearch(customerName(created));
+      selectCustomer(created);
+    } catch (error) {
+      setCustomerError(error instanceof Error
+        ? `Could not find or add this customer. ${error.message}`
+        : 'Could not find or add this customer. Please try again.');
+    } finally {
+      setCustomerSaving(false);
+    }
+  }
+
   async function finalize(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
@@ -201,6 +241,10 @@ export function ReviewSalePage() {
       setValidationError('Correct the highlighted quantity or price values before finalizing.');
       return;
     }
+    if (draft.lines.some((line) => allocateSaleQuantity(line) === null)) {
+      setValidationError('One or more product quantities exceed the available stock.');
+      return;
+    }
     const submittedDraft = { ...draft, requestPending: true };
     try {
       saveSaleDraft(submittedDraft);
@@ -228,14 +272,16 @@ export function ReviewSalePage() {
               },
             }
           : {}),
-        items: draft.lines.map((line) => ({
-          productId: line.productId,
-          stockId: line.stockId,
-          quantity: line.quantity,
-          ...(canEditPrice && line.salePrice !== line.defaultSalePrice
-            ? { salePrice: line.salePrice }
-            : {}),
-        })),
+        items: draft.lines.flatMap((line) =>
+          (allocateSaleQuantity(line) ?? []).map((allocation) => ({
+            productId: line.productId,
+            stockId: allocation.stockId,
+            quantity: allocation.quantity,
+            ...(canEditPrice && line.salePrice !== line.defaultSalePrice
+              ? { salePrice: line.salePrice }
+              : {}),
+          })),
+        ),
       });
       try {
         clearSaleDraft();
@@ -348,14 +394,19 @@ export function ReviewSalePage() {
                             className="w-32"
                             disabled={draft.requestPending || finalizing}
                           />
+                          {saleLineHasMixedPrices(line) && (
+                            <p className="mt-1 text-xs text-amber-700">Default price varies by stock lot.</p>
+                          )}
                           {priceErrors[line.id] && <p role="alert" className="mt-1 max-w-40 text-xs text-rose-700">{priceErrors[line.id]}</p>}
                           {line.salePrice !== line.defaultSalePrice && <p className="mt-1 text-[10px] text-amber-700">Sale-only price; stock price unchanged.</p>}
                         </>
                       ) : (
-                        <span className="tabular-nums text-slate-700">{formatRupees(line.salePrice)}</span>
+                        <span className="tabular-nums text-slate-700">
+                          {saleLineHasMixedPrices(line) ? 'Mixed lot prices' : formatRupees(line.salePrice)}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatRupees(formatCents(lineTotalCents(line.quantity, line.salePrice)))}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatRupees(formatCents(saleLineTotalCents(line)))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -371,9 +422,25 @@ export function ReviewSalePage() {
             </div>
             <div className="relative">
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input aria-label="Search existing customers" placeholder="Search customer name, phone, or email…" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} className="pl-9" disabled={draft.requestPending || finalizing} />
+              <Input
+                aria-label="Search or add customer"
+                placeholder="Search or type a customer name…"
+                value={customerSearch}
+                onChange={(event) => setCustomerSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void resolveCustomerName();
+                  }
+                }}
+                className="pl-9"
+                disabled={draft.requestPending || finalizing || customerSaving}
+              />
             </div>
             {customerError && <p role="alert" className="text-sm text-rose-700">{customerError}</p>}
+            {!customerError && customerSearch.trim() && !customersLoading && !customers.some((customer) => customerName(customer).toLocaleLowerCase() === customerSearch.trim().toLocaleLowerCase()) && (
+              <p className="text-xs text-slate-500">{customerSaving ? 'Checking customer records…' : 'Press Enter to find this customer or add them if they are new.'}</p>
+            )}
             {customersLoading ? <p className="text-xs text-slate-500">Searching customers…</p> : customers.length > 0 ? (
               <div className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-100">
                 {customers.map((customer) => (

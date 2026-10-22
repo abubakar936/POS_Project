@@ -26,6 +26,7 @@ import type {
   VendorOption,
 } from '../../lib/api/catalog.types';
 import { formatRupees } from '../../lib/api/money';
+import { createCompany } from '../../lib/api/companies.api';
 import {
   createStock,
   listInventoryProducts,
@@ -36,6 +37,7 @@ import {
 } from '../../lib/api/stocks.api';
 import type { Product } from '../../lib/api/products.types';
 import { isWholeQuantityUnit } from '../../lib/api/measurement-units';
+import { createVendor } from '../../lib/api/vendors.api';
 
 const PAGE_SIZE = 20;
 
@@ -160,15 +162,9 @@ function validateStockForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!values.productId) errors.productId = 'Select a product.';
-  if (!isNonNegativeDecimal(values.quantity) || Number(values.quantity) <= 0) {
-    errors.quantity = 'Quantity must be greater than zero.';
-  } else if (
-    isWholeQuantityUnit(measuringUnit) &&
-    !/^\d+(?:\.0+)?$/.test(values.quantity)
-  ) {
-    errors.quantity = 'Quantity must be a whole number for this measuring unit.';
+  if (!/^[1-9]\d{0,9}$/.test(values.quantity)) {
+    errors.quantity = 'Quantity must be a positive whole number.';
   }
-  if (!values.locationType.trim()) errors.locationType = 'Enter a location type.';
   if (!isNonNegativeDecimal(values.purchasePrice)) {
     errors.purchasePrice = 'Enter a valid non-negative buy price.';
   }
@@ -190,9 +186,6 @@ function validateStockForm(
   if (values.totalPurchaseValue && !isNonNegativeDecimal(values.totalPurchaseValue, 12)) {
     errors.totalPurchaseValue = 'Enter a valid non-negative total value.';
   }
-  if (!values.vendorId && !values.companyId) {
-    errors.supplier = 'Select a vendor or a company.';
-  }
   return errors;
 }
 
@@ -201,7 +194,7 @@ function stockFormToPayload(values: StockFormValues): CreateStockPayload {
     productId: values.productId,
     quantity: values.quantity,
     ...(values.minimumQuantity ? { minimumQuantity: values.minimumQuantity } : {}),
-    locationType: values.locationType.trim(),
+    ...(values.locationType.trim() ? { locationType: values.locationType.trim() } : {}),
     ...(values.rackLocation.trim() ? { rackLocation: values.rackLocation.trim() } : {}),
     purchasePrice: values.purchasePrice,
     salePrice: values.salePrice,
@@ -233,6 +226,10 @@ export function StocksPage() {
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [values, setValues] = useState<StockFormValues>(emptyForm);
+  const [vendorName, setVendorName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [supplierError, setSupplierError] = useState('');
+  const [supplierSaving, setSupplierSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -374,10 +371,13 @@ export function StocksPage() {
     });
   }
 
-  function beginAddStock() {
-    setValues(emptyForm);
+  function beginAddStock(productId = '') {
+    setValues({ ...emptyForm, productId });
+    setVendorName('');
+    setCompanyName('');
     setFieldErrors({});
     setSubmitError('');
+    setSupplierError('');
     setFormOpen(true);
   }
 
@@ -406,12 +406,106 @@ export function StocksPage() {
       });
       setReloadToken((current) => current + 1);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not add stock.';
-      setSubmitError(message);
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('Product not found')) {
+        setSubmitError('That product is no longer available. Select a product and try again.');
+      } else if (message.includes('Vendor not found or inactive')) {
+        setSubmitError('The selected vendor is inactive or unavailable. Choose another vendor or leave it blank.');
+      } else if (message.includes('Company not found or inactive')) {
+        setSubmitError('The selected company is inactive or unavailable. Choose another company or leave it blank.');
+      } else {
+        setSubmitError(message
+          ? `We couldn’t add this stock receipt. ${message}`
+          : 'We couldn’t add this stock receipt. Check the details and try again.');
+      }
       setConfirmOpen(false);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function resolveVendorName() {
+    const name = vendorName.trim();
+    if (!name || supplierSaving) return;
+    setSupplierSaving(true);
+    setSupplierError('');
+    try {
+      const latestVendors = await getVendors();
+      const existing = latestVendors.find(
+        (vendor) => vendor.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+      );
+      if (existing) {
+        if (!existing.isActive) {
+          setSupplierError('A vendor with this name already exists but is inactive. Activate it before selecting it.');
+          return;
+        }
+        setVendors(latestVendors);
+        setVendorName(existing.name);
+        setField('vendorId', existing.id);
+        return;
+      }
+      const created = await createVendor({ name });
+      setVendors((current) => [created, ...current.filter((vendor) => vendor.id !== created.id)]);
+      setVendorName(created.name);
+      setField('vendorId', created.id);
+    } catch (error) {
+      setSupplierError(error instanceof Error
+        ? `We couldn’t find or add this vendor. ${error.message}`
+        : 'We couldn’t find or add this vendor. Please try again.');
+    } finally {
+      setSupplierSaving(false);
+    }
+  }
+
+  async function resolveCompanyName() {
+    const name = companyName.trim();
+    if (!name || supplierSaving) return;
+    setSupplierSaving(true);
+    setSupplierError('');
+    try {
+      const latestCompanies = await getCompanies();
+      const existing = latestCompanies.find(
+        (company) => company.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+      );
+      if (existing) {
+        if (!existing.isActive) {
+          setSupplierError('A company with this name already exists but is inactive. Activate it before selecting it.');
+          return;
+        }
+        setCompanies(latestCompanies);
+        setCompanyName(existing.name);
+        setField('companyId', existing.id);
+        return;
+      }
+      const created = await createCompany({ name });
+      setCompanies((current) => [created, ...current.filter((company) => company.id !== created.id)]);
+      setCompanyName(created.name);
+      setField('companyId', created.id);
+    } catch (error) {
+      setSupplierError(error instanceof Error
+        ? `We couldn’t find or add this company. ${error.message}`
+        : 'We couldn’t find or add this company. Please try again.');
+    } finally {
+      setSupplierSaving(false);
+    }
+  }
+
+  function selectVendorName(name: string) {
+    setVendorName(name);
+    const existing = activeVendors.find(
+      (vendor) => vendor.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase(),
+    );
+    setField('vendorId', existing?.id ?? '');
+    setSupplierError('');
+  }
+
+  function selectCompanyName(name: string) {
+    setCompanyName(name);
+    const existing = activeCompanies.find(
+      (company) => company.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase(),
+    );
+    setField('companyId', existing?.id ?? '');
+    setSupplierError('');
   }
 
   function saveSalePrice(event: FormEvent<HTMLFormElement>) {
@@ -468,7 +562,7 @@ export function StocksPage() {
             pricing, and location details.
           </p>
         </div>
-        <Button onClick={beginAddStock} disabled={loading || products.length === 0}>
+        <Button onClick={() => beginAddStock()} disabled={loading || products.length === 0}>
           <PackagePlus size={16} /> Add Stock
         </Button>
       </div>
@@ -532,7 +626,7 @@ export function StocksPage() {
               {loading ? (
                 <tr><td colSpan={8}><FeedbackState tone="loading" title="Loading inventory" description="Fetching products and stock records." /></td></tr>
               ) : visibleInventory.length === 0 ? (
-                <tr><td colSpan={8}><FeedbackState tone="empty" title={inventoryRows.length ? 'No inventory on this page' : 'No matching inventory'} description={products.length === 0 ? 'Create products before receiving stock.' : 'Try changing the search or filters, or receive stock for a product.'} action={products.length > 0 && !inventoryRows.length ? <Button onClick={beginAddStock}><PackagePlus size={15} /> Add Stock</Button> : undefined} /></td></tr>
+                <tr><td colSpan={8}><FeedbackState tone="empty" title={inventoryRows.length ? 'No inventory on this page' : 'No matching inventory'} description={products.length === 0 ? 'Create products before receiving stock.' : 'Try changing the search or filters, or receive stock for a product.'} action={products.length > 0 && !inventoryRows.length ? <Button onClick={() => beginAddStock()}><PackagePlus size={15} /> Add Stock</Button> : undefined} /></td></tr>
               ) : visibleInventory.map(({ item, record }) => {
                 const status = getInventoryStatus(item);
                 const location = record
@@ -574,7 +668,7 @@ export function StocksPage() {
                     <td className="px-4 py-3.5 last:pr-5 text-right">
                       <div className="flex justify-end gap-2">
                         {record && <Button size="sm" variant="secondary" onClick={() => { setPriceEditStock(record); setPriceEditValue(record.salePrice); setPriceEditError(''); }}>Edit sale price</Button>}
-                        <Button size="sm" variant="secondary" onClick={() => { setValues({ ...emptyForm, productId: item.product.id }); setFieldErrors({}); setSubmitError(''); setFormOpen(true); }}>Add stock</Button>
+                        <Button size="sm" variant="secondary" onClick={() => beginAddStock(item.product.id)}>Add stock</Button>
                       </div>
                     </td>
                   </tr>
@@ -604,7 +698,6 @@ export function StocksPage() {
 
       <Modal open={formOpen} onClose={() => { if (!saving) setFormOpen(false); }} title="Add stock" description="Create a new stock receipt for a product. Existing stock lots and sales quantities are not edited.">
         <form onSubmit={requestConfirmation} className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
-          {submitError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{submitError}</p>}
           <FormField label="Product" error={fieldErrors.productId}>
             <Select id="stock-product" required value={values.productId} onChange={(event) => setField('productId', event.target.value)}>
               <option value="">Select a product</option>
@@ -618,7 +711,7 @@ export function StocksPage() {
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label={`Received quantity${selectedProduct?.measuringUnit ? ` (${selectedProduct.measuringUnit})` : ''}`} error={fieldErrors.quantity}>
-              <Input id="stock-quantity" type="number" min="0.01" step={selectedProduct && isWholeQuantityUnit(selectedProduct.measuringUnit) ? '1' : '0.01'} required value={values.quantity} onChange={(event) => setField('quantity', event.target.value)} />
+              <Input id="stock-quantity" type="number" min="1" step="1" required value={values.quantity} onChange={(event) => setField('quantity', event.target.value)} />
             </FormField>
             <FormField label={`Low-stock threshold (optional)${selectedProduct?.measuringUnit ? ` (${selectedProduct.measuringUnit})` : ''}`} error={fieldErrors.minimumQuantity}>
               <Input id="stock-minimum" type="number" min="0" step={selectedProduct && isWholeQuantityUnit(selectedProduct.measuringUnit) ? '1' : '0.01'} value={values.minimumQuantity} onChange={(event) => setField('minimumQuantity', event.target.value)} />
@@ -635,8 +728,8 @@ export function StocksPage() {
             <FormField label="Total purchase value (optional)" error={fieldErrors.totalPurchaseValue}>
               <Input id="stock-total-value" type="number" min="0" step="0.01" value={values.totalPurchaseValue} onChange={(event) => setField('totalPurchaseValue', event.target.value)} />
             </FormField>
-            <FormField label="Location type" error={fieldErrors.locationType}>
-              <Input id="stock-location-type" required placeholder="For example: Warehouse" value={values.locationType} onChange={(event) => setField('locationType', event.target.value)} />
+            <FormField label="Location type (optional)" error={fieldErrors.locationType}>
+              <Input id="stock-location-type" placeholder="For example: Warehouse" value={values.locationType} onChange={(event) => setField('locationType', event.target.value)} />
             </FormField>
             <FormField label="Rack / shelf (optional)">
               <Input id="stock-rack" value={values.rackLocation} onChange={(event) => setField('rackLocation', event.target.value)} />
@@ -644,22 +737,52 @@ export function StocksPage() {
             <FormField label="Purchase date (optional)">
               <Input id="stock-purchase-date" type="date" value={values.purchaseDate} onChange={(event) => setField('purchaseDate', event.target.value)} />
             </FormField>
-            <FormField label="Vendor (select vendor or company)" error={fieldErrors.supplier}>
-              <Select id="stock-vendor" value={values.vendorId} onChange={(event) => setField('vendorId', event.target.value)}>
-                <option value="">No vendor selected</option>
-                {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-              </Select>
+            <FormField label="Vendor (optional)">
+              <Input
+                id="stock-vendor"
+                list="stock-vendor-options"
+                placeholder="Choose or type a vendor"
+                value={vendorName}
+                disabled={supplierSaving}
+                onChange={(event) => selectVendorName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void resolveVendorName();
+                  }
+                }}
+              />
+              <datalist id="stock-vendor-options">
+                {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.name} />)}
+              </datalist>
             </FormField>
-            <FormField label="Company (select vendor or company)">
-              <Select id="stock-company" value={values.companyId} onChange={(event) => setField('companyId', event.target.value)}>
-                <option value="">No company selected</option>
-                {activeCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </Select>
+            <FormField label="Company (optional)">
+              <Input
+                id="stock-company"
+                list="stock-company-options"
+                placeholder="Choose or type a company"
+                value={companyName}
+                disabled={supplierSaving}
+                onChange={(event) => selectCompanyName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void resolveCompanyName();
+                  }
+                }}
+              />
+              <datalist id="stock-company-options">
+                {activeCompanies.map((company) => <option key={company.id} value={company.name} />)}
+              </datalist>
             </FormField>
           </div>
+          {supplierError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{supplierError}</p>}
+          <p className="text-xs text-slate-500">Choose an existing name or type a new one and press Enter. You can leave both blank.</p>
+          {submitError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{submitError}</p>}
           <p className="text-xs leading-5 text-slate-500">
-            The backend requires at least one active vendor or company. It sets
-            the starting remaining quantity to the received quantity.
+            Product, received quantity, buy price, and selling price are
+            required. Other receipt details are optional. The starting
+            remaining quantity is set to the received quantity.
           </p>
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <Button type="button" variant="secondary" disabled={saving} onClick={() => setFormOpen(false)}>Cancel</Button>

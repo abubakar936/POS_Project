@@ -7,8 +7,7 @@ import {
   Matches,
 } from 'class-validator';
 
-const POSITIVE_QUANTITY_2_PLACES =
-  /^(?=.*[1-9])\d{1,10}(?:\.\d{1,2})?$/;
+const POSITIVE_INTEGER_QUANTITY = /^(?=.*[1-9])\d{1,10}$/;
 const STOCK_MONEY_2_PLACES = /^\d{1,10}(?:\.\d{1,2})?$/;
 const PURCHASE_VALUE_2_PLACES = /^\d{1,12}(?:\.\d{1,2})?$/;
 
@@ -18,7 +17,7 @@ export class CreateStockDto {
 
   @IsNotEmpty()
   @IsNumberString()
-  @Matches(POSITIVE_QUANTITY_2_PLACES)
+  @Matches(POSITIVE_INTEGER_QUANTITY)
   quantity: string;
 
   @IsOptional()
@@ -26,8 +25,9 @@ export class CreateStockDto {
   @Matches(STOCK_MONEY_2_PLACES)
   minimumQuantity?: string;
 
+  @IsOptional()
   @IsString()
-  locationType: string;
+  locationType?: string;
 
   @IsOptional()
   @IsString()

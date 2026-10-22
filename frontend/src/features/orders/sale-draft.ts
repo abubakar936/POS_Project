@@ -11,6 +11,13 @@ export interface SaleCartLine {
   salePrice: string;
   defaultSalePrice: string;
   availableQuantity: string;
+  stockOptions?: SaleStockOption[];
+}
+
+export interface SaleStockOption {
+  stockId: string;
+  availableQuantity: string;
+  salePrice: string;
 }
 
 export interface SaleDraft {
@@ -89,7 +96,15 @@ function isSaleDraft(value: unknown): value is SaleDraft {
       typeof line.quantity === 'string' &&
       typeof line.salePrice === 'string' &&
       typeof line.defaultSalePrice === 'string' &&
-      typeof line.availableQuantity === 'string',
+      typeof line.availableQuantity === 'string' &&
+      (line.stockOptions === undefined ||
+        (Array.isArray(line.stockOptions) &&
+          line.stockOptions.every((option) =>
+            Boolean(option) &&
+            typeof option.stockId === 'string' &&
+            typeof option.availableQuantity === 'string' &&
+            typeof option.salePrice === 'string',
+          ))),
     ) &&
     (draft.requestPending === undefined || typeof draft.requestPending === 'boolean') &&
     typeof draft.discountAmount === 'string' &&
@@ -119,4 +134,64 @@ export function formatCents(value: bigint): string {
 
 export function lineTotalCents(quantity: string, price: string): bigint {
   return (parseQuantity(quantity) * parseMoney(price) + 50n) / 100n;
+}
+
+export function allocateSaleQuantity(
+  line: SaleCartLine,
+  quantity = line.quantity,
+): Array<{ stockId: string; quantity: string; salePrice: string }> | null {
+  const options = line.stockOptions?.length
+    ? line.stockOptions
+    : [{
+        stockId: line.stockId,
+        availableQuantity: line.availableQuantity,
+        salePrice: line.defaultSalePrice,
+      }];
+  const prioritizedOptions = [
+    ...options.filter((option) => option.stockId === line.stockId),
+    ...options.filter((option) => option.stockId !== line.stockId),
+  ];
+  let remaining = parseQuantity(quantity);
+  const allocations: Array<{ stockId: string; quantity: string; salePrice: string }> = [];
+
+  for (const option of prioritizedOptions) {
+    const allocated = parseQuantity(option.availableQuantity) < remaining
+      ? parseQuantity(option.availableQuantity)
+      : remaining;
+    if (allocated > 0n) {
+      allocations.push({
+        stockId: option.stockId,
+        quantity: formatCents(allocated),
+        salePrice: option.salePrice,
+      });
+      remaining -= allocated;
+    }
+  }
+
+  return remaining === 0n ? allocations : null;
+}
+
+export function saleLineTotalCents(line: SaleCartLine): bigint {
+  const allocations = allocateSaleQuantity(line);
+  if (!allocations) return 0n;
+  return allocations.reduce(
+    (sum, allocation) =>
+      sum +
+      lineTotalCents(
+        allocation.quantity,
+        line.salePrice !== line.defaultSalePrice
+          ? line.salePrice
+          : allocation.salePrice,
+      ),
+    0n,
+  );
+}
+
+export function saleLineHasMixedPrices(line: SaleCartLine): boolean {
+  if (line.salePrice !== line.defaultSalePrice) return false;
+  const allocations = allocateSaleQuantity(line);
+  return Boolean(
+    allocations &&
+      new Set(allocations.map((allocation) => allocation.salePrice)).size > 1,
+  );
 }

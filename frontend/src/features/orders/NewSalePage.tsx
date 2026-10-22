@@ -24,10 +24,11 @@ import {
   emptySaleDraft,
   clearSaleDraft,
   formatCents,
-  lineTotalCents,
   parseMoney,
   parseQuantity,
   readSaleDraft,
+  saleLineHasMixedPrices,
+  saleLineTotalCents,
   saveSaleDraft,
   type SaleCartLine,
   type SaleDraft,
@@ -133,7 +134,7 @@ export function NewSalePage() {
   }, [categoryId, products, search]);
 
   const lineTotals = useMemo(
-    () => draft.lines.map((line) => lineTotalCents(line.quantity, line.salePrice)),
+    () => draft.lines.map(saleLineTotalCents),
     [draft.lines],
   );
   const subtotalCents = lineTotals.reduce((sum, cents) => sum + cents, 0n);
@@ -152,43 +153,54 @@ export function NewSalePage() {
 
   function addProduct(entry: SaleProduct) {
     if (draft.requestPending || draftError) return;
-    const quantityStep = 100n;
-    const firstAvailable = entry.stocks.find((stock) => {
-      const used = draft.lines
-        .filter((line) => line.stockId === stock.id)
-        .reduce((sum, line) => sum + parseQuantity(line.quantity), 0n);
-      return used < parseQuantity(stock.remainingQuantity);
+    const productLines = draft.lines.filter((line) => line.productId === entry.product.id);
+    const currentQuantity = productLines.reduce(
+      (sum, line) => sum + parseQuantity(line.quantity),
+      0n,
+    );
+    const remaining = entry.availableHundredths - currentQuantity;
+    if (remaining <= 0n) return;
+    const increment = remaining < 100n ? remaining : 100n;
+    const current = productLines[0];
+    const stockOptions = entry.stocks.map((stock) => ({
+      stockId: stock.id,
+      availableQuantity: stock.remainingQuantity,
+      salePrice: stock.salePrice,
+    }));
+    const stockId = current && stockOptions.some((option) => option.stockId === current.stockId)
+      ? current.stockId
+      : stockOptions[0]?.stockId;
+    if (!stockId) return;
+    const primaryStock = stockOptions.find((option) => option.stockId === stockId);
+    if (!primaryStock) return;
+    const nextLine: SaleCartLine = current
+      ? {
+          ...current,
+          stockId,
+          quantity: formatQuantity(currentQuantity + increment),
+          availableQuantity: formatQuantity(entry.availableHundredths),
+          stockOptions,
+        }
+      : {
+          id: crypto.randomUUID(),
+          productId: entry.product.id,
+          stockId,
+          productName: entry.product.name,
+          sku: entry.product.sku || entry.product.barcode || '',
+          measuringUnit: entry.product.measuringUnit ?? '',
+          quantity: formatQuantity(increment),
+          salePrice: primaryStock.salePrice,
+          defaultSalePrice: primaryStock.salePrice,
+          availableQuantity: formatQuantity(entry.availableHundredths),
+          stockOptions,
+        };
+    persist({
+      ...draft,
+      lines: [
+        ...draft.lines.filter((line) => line.productId !== entry.product.id),
+        nextLine,
+      ],
     });
-    if (!firstAvailable) return;
-
-    const used = draft.lines
-      .filter((line) => line.stockId === firstAvailable.id)
-      .reduce((sum, line) => sum + parseQuantity(line.quantity), 0n);
-    const remaining = parseQuantity(firstAvailable.remainingQuantity) - used;
-    const increment = quantityStep < remaining ? quantityStep : remaining;
-    const current = draft.lines.find((line) => line.stockId === firstAvailable.id);
-    const nextLines = current
-      ? draft.lines.map((line) =>
-          line.id === current.id
-            ? { ...line, quantity: formatQuantity(parseQuantity(line.quantity) + increment) }
-            : line,
-        )
-      : [
-          ...draft.lines,
-          {
-            id: crypto.randomUUID(),
-            productId: entry.product.id,
-            stockId: firstAvailable.id,
-            productName: entry.product.name,
-            sku: entry.product.sku || entry.product.barcode || '',
-            measuringUnit: entry.product.measuringUnit ?? '',
-            quantity: formatQuantity(increment),
-            salePrice: firstAvailable.salePrice,
-            defaultSalePrice: firstAvailable.salePrice,
-            availableQuantity: firstAvailable.remainingQuantity,
-          },
-        ];
-    persist({ ...draft, lines: nextLines });
   }
 
   function updateQuantity(line: SaleCartLine, value: string) {
@@ -374,14 +386,14 @@ export function NewSalePage() {
             ) : (
               <div className="divide-y divide-slate-100">
                 {draft.lines.map((line) => {
-                  const lineTotal = lineTotalCents(line.quantity, line.salePrice);
+                  const lineTotal = saleLineTotalCents(line);
                   const error = quantityErrors[line.id];
                   return (
                     <div key={line.id} className="space-y-2 px-4 py-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">{line.productName}</p>
-                          <p className="text-[11px] text-slate-500">{line.sku || 'No SKU'} · {line.measuringUnit || 'unit'} · {formatRupees(line.salePrice)}</p>
+                          <p className="text-[11px] text-slate-500">{line.sku || 'No SKU'} · {line.measuringUnit || 'unit'} · {saleLineHasMixedPrices(line) ? 'Mixed lot prices' : formatRupees(line.salePrice)}</p>
                         </div>
                         <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatRupees(formatCents(lineTotal))}</p>
                       </div>
