@@ -3,6 +3,10 @@ import { isKnownMeasuringUnit } from '../../lib/api/measurement-units';
 
 export interface ProductFormValues {
   name: string;
+  nickname: string;
+  marketName: string;
+  imageUrl: string;
+  imagePath: string;
   sku: string;
   barcode: string;
   categoryId: string;
@@ -25,6 +29,10 @@ export interface ProductFormValues {
 
 export const emptyProductFormValues: ProductFormValues = {
   name: '',
+  nickname: '',
+  marketName: '',
+  imageUrl: '',
+  imagePath: '',
   sku: '',
   barcode: '',
   categoryId: '',
@@ -48,6 +56,10 @@ export const emptyProductFormValues: ProductFormValues = {
 export function productToFormValues(product: Product): ProductFormValues {
   return {
     name: product.name,
+    nickname: product.nickname ?? '',
+    marketName: product.marketName ?? '',
+    imageUrl: product.imageUrl ?? '',
+    imagePath: product.imagePath ?? '',
     sku: product.sku ?? '',
     barcode: product.barcode ?? '',
     categoryId: product.categoryId ?? '',
@@ -77,6 +89,24 @@ export function validateProductForm(
   if (!values.name.trim()) errors.name = 'Product name is required.';
   if (values.name.trim().length > 255) {
     errors.name = 'Product name must be 255 characters or fewer.';
+  }
+  for (const field of ['nickname', 'marketName'] as const) {
+    if (values[field].length > 255) errors[field] = 'Value must be 255 characters or fewer.';
+  }
+  if (values.imageUrl.trim()) {
+    try {
+      const imageUrl = new URL(values.imageUrl.trim());
+      if (
+        !['http:', 'https:'].includes(imageUrl.protocol) ||
+        imageUrl.username ||
+        imageUrl.password ||
+        values.imageUrl.trim().length > 2048
+      ) {
+        errors.imageUrl = 'Enter a public HTTP or HTTPS image URL up to 2048 characters.';
+      }
+    } catch {
+      errors.imageUrl = 'Enter a valid absolute HTTP or HTTPS image URL.';
+    }
   }
   if (values.sku.trim().length > 100) errors.sku = 'SKU must be 100 characters or fewer.';
   if (values.barcode.trim().length > 100) {
@@ -116,7 +146,10 @@ export function validateProductForm(
 export function productFormToPayload(
   values: ProductFormValues,
 ): ProductPayload {
-  const payload: ProductPayload = { name: values.name.trim() };
+  const payload: ProductPayload = { name: values.name };
+  payload.nickname = values.nickname.trim() || null;
+  payload.marketName = values.marketName.trim() || null;
+  payload.imageUrl = values.imageUrl.trim() || null;
   setOptional(payload, 'sku', values.sku.trim());
   setOptional(payload, 'barcode', values.barcode.trim());
   setOptional(payload, 'measuringUnit', values.measuringUnit.trim());

@@ -1,9 +1,9 @@
 import {
   AlertCircle,
-  Barcode,
   Boxes,
   Eye,
   FilePenLine,
+  Image,
   Plus,
   Search,
   Trash2,
@@ -20,7 +20,7 @@ import { Select } from '../../components/ui/Select';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Table } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
-import { ApiError } from '../../lib/api/client';
+import { ApiError, resolveApiAssetUrl } from '../../lib/api/client';
 import { login } from '../../lib/api/auth.api';
 import {
   getProductStockRecords,
@@ -229,13 +229,13 @@ export function ProductsPage() {
 
   const tableBody = loading ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={9}>
         <FeedbackState tone="loading" title="Loading products" description="Fetching your catalog and stock balances." />
       </td>
     </tr>
   ) : loadError ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={9}>
         <FeedbackState
           tone="error"
           title={authError ? 'Sign-in required' : 'Products could not be loaded'}
@@ -248,7 +248,7 @@ export function ProductsPage() {
     </tr>
   ) : products.length === 0 ? (
     <tr>
-      <td colSpan={8}>
+      <td colSpan={9}>
         <FeedbackState
           tone="empty"
           title={search || status !== 'all' ? 'No matching products' : 'Your catalog is empty'}
@@ -260,11 +260,41 @@ export function ProductsPage() {
   ) : (
     products.map((product) => (
       <tr key={product.id} className="text-sm text-slate-600">
+        <td className="px-3 py-3.5">
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-slate-400">
+            {(product.imagePath || product.imageUrl) ? (
+              <>
+                <img
+                  src={product.imagePath ? resolveApiAssetUrl(product.imagePath) : product.imageUrl ?? undefined}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover"
+                  onError={(event) => {
+                    if (
+                      product.imagePath &&
+                      product.imageUrl &&
+                      event.currentTarget.src !== product.imageUrl
+                    ) {
+                      event.currentTarget.src = product.imageUrl;
+                      return;
+                    }
+                    event.currentTarget.classList.add('hidden');
+                    event.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+                <Image size={17} className="hidden" aria-hidden="true" />
+              </>
+            ) : (
+              <Image size={17} aria-hidden="true" />
+            )}
+          </div>
+        </td>
         <td className="px-4 py-3.5 first:pl-5">
           <div className="flex min-w-44 items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500"><Barcode size={17} /></span>
             <div className="min-w-0">
               <p className="truncate font-medium text-slate-800">{product.name}</p>
+              {(product.nickname || product.marketName) && <p className="truncate text-xs text-slate-500">{product.nickname || product.marketName}</p>}
               <p className="mt-0.5 truncate text-xs text-slate-400">{product.measuringUnit || 'Unit not set'}</p>
             </div>
           </div>
@@ -330,7 +360,7 @@ export function ProductsPage() {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <Table
-          headers={['Product', 'SKU / barcode', 'Category', 'Selling price', 'Buy price', 'Stock', 'Status', 'Actions']}
+          headers={['Image', 'Product', 'SKU / barcode', 'Category', 'Selling price', 'Buy price', 'Stock', 'Status', 'Actions']}
           caption="Product catalog"
         >
           {tableBody}
@@ -360,6 +390,8 @@ export function ProductsPage() {
         ) : selectedProduct ? (
           <div className="space-y-5">
             <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+              <Detail label="Nickname" value={selectedProduct.nickname} />
+              <Detail label="Market name" value={selectedProduct.marketName} />
               <Detail label="SKU" value={selectedProduct.sku} />
               <Detail label="Barcode" value={selectedProduct.barcode} />
               <Detail label="Category" value={selectedProduct.category?.name} />
@@ -373,6 +405,25 @@ export function ProductsPage() {
               <Detail label="Printed price" value={formatRupees(selectedProduct.printedPrice)} />
               <Detail label="Status" value={selectedProduct.isActive ? 'Active' : 'Inactive'} />
             </dl>
+            {(selectedProduct.imagePath || selectedProduct.imageUrl) && (
+              <img
+                src={selectedProduct.imagePath ? resolveApiAssetUrl(selectedProduct.imagePath) : selectedProduct.imageUrl ?? undefined}
+                alt={selectedProduct.name}
+                referrerPolicy="no-referrer"
+                className="h-40 w-40 rounded-lg border border-slate-200 object-cover"
+                onError={(event) => {
+                  if (
+                    selectedProduct.imagePath &&
+                    selectedProduct.imageUrl &&
+                    event.currentTarget.src !== selectedProduct.imageUrl
+                  ) {
+                    event.currentTarget.src = selectedProduct.imageUrl;
+                    return;
+                  }
+                  event.currentTarget.classList.add('hidden');
+                }}
+              />
+            )}
             {selectedProduct.description && <div><h3 className="text-xs font-medium text-slate-500">Description</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{selectedProduct.description}</p></div>}
             <div>
               <h3 className="text-sm font-semibold text-slate-800">Stock records</h3>

@@ -2,6 +2,10 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const API_BASE_URL = (configuredBaseUrl || '/api').replace(/\/+$/, '');
 export const ACCESS_TOKEN_STORAGE_KEY = 'pos_access_token';
 
+export function resolveApiAssetUrl(path: string): string {
+  return `${API_BASE_URL}/${path.replace(/^\/+/, '')}`;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly messages: string[];

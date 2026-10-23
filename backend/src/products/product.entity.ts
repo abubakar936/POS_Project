@@ -23,6 +23,18 @@ export class Product {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  nickname?: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  marketName?: string | null;
+
+  @Column({ type: 'varchar', length: 2048, nullable: true })
+  imageUrl?: string | null;
+
+  @Column({ type: 'varchar', length: 1024, nullable: true })
+  imagePath?: string | null;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   sku?: string | null;
 

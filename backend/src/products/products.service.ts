@@ -31,6 +31,9 @@ export class ProductsService {
 
     const entity = this.repo.create({
       name: dto.name,
+      nickname: dto.nickname ?? null,
+      marketName: dto.marketName ?? null,
+      imageUrl: dto.imageUrl ?? null,
       sku: dto.sku ?? null,
       barcode: dto.barcode ?? null,
       categoryId: dto.categoryId ?? null,
@@ -91,6 +94,8 @@ export class ProductsService {
   async update(id: string, dto: UpdateProductDto) {
     const product = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!product) throw new NotFoundException('Product not found');
+    const imageUrlChanged =
+      dto.imageUrl !== undefined && dto.imageUrl !== product.imageUrl;
 
     if ((dto as any).categoryId) {
       const cat = await this.categoryRepo.findOne({ where: { id: (dto as any).categoryId, deletedAt: IsNull(), isActive: true } });
@@ -103,6 +108,7 @@ export class ProductsService {
     }
 
     Object.assign(product, dto);
+    if (imageUrlChanged) product.imagePath = null;
     try {
       return await this.repo.save(product);
     } catch (err) {

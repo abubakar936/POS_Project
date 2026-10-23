@@ -1,8 +1,23 @@
-import { IsOptional, IsString, IsUUID, IsBoolean, IsInt, IsNumberString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsBoolean, IsInt, IsNumberString, IsUrl, MaxLength } from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
   name: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  nickname?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  marketName?: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @MaxLength(2048)
+  imageUrl?: string;
 
   @IsOptional()
   @IsString()

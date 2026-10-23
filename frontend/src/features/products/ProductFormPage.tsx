@@ -6,7 +6,7 @@ import { FeedbackState } from '../../components/ui/FeedbackState';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Textarea } from '../../components/ui/Textarea';
-import { ApiError } from '../../lib/api/client';
+import { ApiError, resolveApiAssetUrl } from '../../lib/api/client';
 import {
   getActiveCategories,
   getCompanies,
@@ -203,6 +203,12 @@ export function ProductFormPage() {
           <Field label="Product name" required error={fieldErrors.name}>
             <Input id="name" autoFocus value={values.name} onChange={(event) => updateField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} />
           </Field>
+          <Field label="Nickname" hint="Optional shop shorthand for this product." error={fieldErrors.nickname}>
+            <Input id="nickname" maxLength={255} value={values.nickname} onChange={(event) => updateField('nickname', event.target.value)} aria-invalid={Boolean(fieldErrors.nickname)} />
+          </Field>
+          <Field label="Market name" hint="Optional common name used in your market." error={fieldErrors.marketName}>
+            <Input id="marketName" maxLength={255} value={values.marketName} onChange={(event) => updateField('marketName', event.target.value)} aria-invalid={Boolean(fieldErrors.marketName)} />
+          </Field>
           <Field label="SKU" hint="Optional internal product code." error={fieldErrors.sku}>
             <Input id="sku" value={values.sku} onChange={(event) => updateField('sku', event.target.value)} aria-invalid={Boolean(fieldErrors.sku)} />
           </Field>
@@ -282,6 +288,42 @@ export function ProductFormPage() {
               {catalogs.vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}{vendor.companyName ? ` · ${vendor.companyName}` : ''}{!vendor.isActive ? ' (Inactive)' : ''}</option>)}
             </Select>
           </Field>
+        </FormSection>
+
+        <FormSection title="Product image" description="Save a public image URL now, or download it later for offline display.">
+          <Field label="Image URL" hint="Only HTTP or HTTPS URLs are accepted." error={fieldErrors.imageUrl} className="md:col-span-2">
+            <Input
+              id="imageUrl"
+              type="url"
+              maxLength={2048}
+              value={values.imageUrl}
+              onChange={(event) => updateField('imageUrl', event.target.value)}
+              aria-invalid={Boolean(fieldErrors.imageUrl)}
+            />
+          </Field>
+          {(values.imagePath || values.imageUrl) && !fieldErrors.imageUrl && (
+            <div className="md:col-span-2">
+              <img
+                src={values.imagePath ? resolveApiAssetUrl(values.imagePath) : values.imageUrl}
+                alt="Product preview"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                className="h-28 w-28 rounded-lg border border-slate-200 object-cover"
+                onError={(event) => {
+                  if (
+                    values.imagePath &&
+                    values.imageUrl &&
+                    event.currentTarget.src !== values.imageUrl
+                  ) {
+                    event.currentTarget.src = values.imageUrl;
+                    return;
+                  }
+                  event.currentTarget.classList.add('hidden');
+                }}
+              />
+              {values.imagePath && <p className="mt-1 text-xs text-slate-500">Local offline image</p>}
+            </div>
+          )}
         </FormSection>
 
         <FormSection title="Classification" description="Subcategory choices follow the selected category.">

@@ -3,6 +3,10 @@ import type { CategoryOption, SubcategoryOption } from './catalog.types';
 export interface Product {
   id: string;
   name: string;
+  nickname?: string | null;
+  marketName?: string | null;
+  imageUrl?: string | null;
+  imagePath?: string | null;
   sku?: string | null;
   barcode?: string | null;
   categoryId?: string | null;
@@ -29,6 +33,9 @@ export interface Product {
 
 export interface ProductPayload {
   name: string;
+  nickname?: string | null;
+  marketName?: string | null;
+  imageUrl?: string | null;
   sku?: string;
   barcode?: string;
   categoryId?: string | null;
