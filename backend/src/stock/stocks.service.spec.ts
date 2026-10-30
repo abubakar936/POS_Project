@@ -53,6 +53,38 @@ describe('StocksService.create', () => {
     });
   });
 
+  describe('StocksService.update', () => {
+    it('allows editing receipt details when no vendor or company is assigned', async () => {
+      const existingStock = {
+        id: '00000000-0000-4000-8000-000000000002',
+        productId: '00000000-0000-4000-8000-000000000001',
+        vendorId: null,
+        companyId: null,
+        locationType: 'Front',
+      } as Stock;
+      const stockRepo = {
+        findOne: jest.fn().mockResolvedValue(existingStock),
+        save: jest.fn((stock: Stock) => stock),
+      };
+      const productRepo = {
+        findOne: jest.fn().mockResolvedValue({ ...product, id: existingStock.productId }),
+      };
+      const service = new StocksService(
+        stockRepo as unknown as Repository<Stock>,
+        productRepo as unknown as Repository<Product>,
+      );
+
+      const updated = await service.update(existingStock.id, {
+        locationType: 'Back room',
+        minimumQuantity: '5',
+      });
+
+      expect(updated.locationType).toBe('Back room');
+      expect(updated.minimumQuantity).toBe('5');
+      expect(stockRepo.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('rejects fractional received quantities', async () => {
     await expect(
       service.create({

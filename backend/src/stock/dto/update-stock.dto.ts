@@ -3,7 +3,7 @@ import { IsOptional, IsString, IsNumberString, IsUUID } from 'class-validator';
 export class UpdateStockDto {
   @IsOptional()
   @IsNumberString()
-  minimumQuantity?: string;
+  minimumQuantity?: string | null;
 
   @IsOptional()
   @IsString()
@@ -11,19 +11,19 @@ export class UpdateStockDto {
 
   @IsOptional()
   @IsString()
-  rackLocation?: string;
+  rackLocation?: string | null;
 
   @IsOptional()
   @IsNumberString()
-  printedPrice?: string;
+  printedPrice?: string | null;
 
   @IsOptional()
   @IsNumberString()
-  totalPurchaseValue?: string;
+  totalPurchaseValue?: string | null;
 
   @IsOptional()
   @IsString()
-  purchaseDate?: string;
+  purchaseDate?: string | null;
 
   @IsOptional()
   @IsUUID()
@@ -31,9 +31,9 @@ export class UpdateStockDto {
 
   @IsOptional()
   @IsUUID()
-  vendorId?: string;
+  vendorId?: string | null;
 
   @IsOptional()
   @IsUUID()
-  companyId?: string;
+  companyId?: string | null;
 }

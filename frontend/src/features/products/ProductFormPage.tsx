@@ -203,10 +203,7 @@ export function ProductFormPage() {
           <Field label="Product name" required error={fieldErrors.name}>
             <Input id="name" autoFocus value={values.name} onChange={(event) => updateField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} />
           </Field>
-          <Field label="Nickname" hint="Optional shop shorthand for this product." error={fieldErrors.nickname}>
-            <Input id="nickname" maxLength={255} value={values.nickname} onChange={(event) => updateField('nickname', event.target.value)} aria-invalid={Boolean(fieldErrors.nickname)} />
-          </Field>
-          <Field label="Market name" hint="Optional common name used in your market." error={fieldErrors.marketName}>
+          <Field label="Product Market Name / Short Name" hint="Optional common name used to recognize this product." error={fieldErrors.marketName}>
             <Input id="marketName" maxLength={255} value={values.marketName} onChange={(event) => updateField('marketName', event.target.value)} aria-invalid={Boolean(fieldErrors.marketName)} />
           </Field>
           <Field label="SKU" hint="Optional internal product code." error={fieldErrors.sku}>
@@ -348,19 +345,6 @@ export function ProductFormPage() {
           </Field>
         </FormSection>
 
-        <FormSection title="Pricing" description="Amounts are submitted as decimal strings to match the API.">
-          <PriceField id="purchasePrice" label="Buy price" value={values.purchasePrice} onChange={(value) => updateField('purchasePrice', value)} error={fieldErrors.purchasePrice} />
-          <PriceField id="salePrice" label="Selling price" value={values.salePrice} onChange={(value) => updateField('salePrice', value)} error={fieldErrors.salePrice} />
-          <PriceField id="retailPrice" label="Retail price" value={values.retailPrice} onChange={(value) => updateField('retailPrice', value)} error={fieldErrors.retailPrice} />
-          <div className="space-y-3">
-            <label className="flex items-center gap-2.5 text-sm text-slate-700">
-              <input type="checkbox" checked={values.isPricePrinted} onChange={(event) => updateField('isPricePrinted', event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
-              Price is printed on the product
-            </label>
-            {values.isPricePrinted && <PriceField id="printedPrice" label="Printed price" value={values.printedPrice} onChange={(value) => updateField('printedPrice', value)} error={fieldErrors.printedPrice} />}
-          </div>
-        </FormSection>
-
         <FormSection title="Additional details">
           <Field label="Description" className="md:col-span-2">
             <Textarea id="description" rows={4} value={values.description} onChange={(event) => updateField('description', event.target.value)} />
@@ -435,28 +419,5 @@ function Field({
         {error ? <span role="alert" className="block text-xs text-rose-700">{error}</span> : hint && <span className="block text-xs text-slate-400">{hint}</span>}
       </span>
     </label>
-  );
-}
-
-function PriceField({
-  id,
-  label,
-  value,
-  onChange,
-  error,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-}) {
-  return (
-    <Field label={label} error={error}>
-      <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Rs.</span>
-        <Input id={id} inputMode="decimal" placeholder="0.00" value={value} onChange={(event) => onChange(event.target.value)} className="pl-10" aria-invalid={Boolean(error)} />
-      </div>
-    </Field>
   );
 }

@@ -2,14 +2,29 @@ import { apiRequest, encodeQuery } from './client';
 import type { PageResult, StockRecord } from './catalog.types';
 import type { Product } from './products.types';
 
-const PAGE_SIZE = 100;
-const PAGE_CONCURRENCY = 4;
-
 export interface InventoryStockRecord extends StockRecord {
   product?: Product | null;
   createdAt: string;
   purchaseDate?: string | null;
   totalPurchaseValue?: string | null;
+}
+
+export interface StockListQuery {
+  search?: string;
+  categoryId?: string;
+  productIds?: string;
+}
+
+export interface UpdateStockPayload {
+  productId?: string;
+  minimumQuantity?: string | null;
+  locationType?: string;
+  rackLocation?: string | null;
+  printedPrice?: string | null;
+  totalPurchaseValue?: string | null;
+  purchaseDate?: string | null;
+  vendorId?: string | null;
+  companyId?: string | null;
 }
 
 export interface CreateStockPayload {
@@ -39,47 +54,36 @@ export function listVendorStockRecords(
   );
 }
 
-async function getAllPages<T>(
-  path: string,
+export function listInventoryStocks(
+  page: number,
+  limit: number,
   signal?: AbortSignal,
-): Promise<T[]> {
-  const first = await apiRequest<PageResult<T>>(
-    `${path}${encodeQuery({ page: 1, limit: PAGE_SIZE })}`,
+  query: StockListQuery = {},
+) {
+  return apiRequest<PageResult<InventoryStockRecord>>(
+    `/stocks${encodeQuery({ ...query, page, limit })}`,
     { signal },
   );
-  const pages: PageResult<T>[] = [first];
-  let nextPage = 2;
+}
 
-  async function worker() {
-    while (nextPage <= first.meta.totalPages) {
-      const page = nextPage;
-      nextPage += 1;
-      pages.push(
-        await apiRequest<PageResult<T>>(
-          `${path}${encodeQuery({ page, limit: PAGE_SIZE })}`,
-          { signal },
-        ),
-      );
-    }
-  }
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(PAGE_CONCURRENCY, first.meta.totalPages - 1) },
-      () => worker(),
-    ),
+export async function listStocksForProducts(
+  productIds: string[],
+  signal?: AbortSignal,
+) {
+  if (productIds.length === 0) return [];
+  const first = await apiRequest<PageResult<InventoryStockRecord>>(
+    `/stocks${encodeQuery({ productIds: productIds.join(','), page: 1, limit: 100 })}`,
+    { signal },
   );
-  return pages
-    .sort((left, right) => left.meta.page - right.meta.page)
-    .flatMap((result) => result.data);
-}
-
-export function listInventoryStocks(signal?: AbortSignal) {
-  return getAllPages<InventoryStockRecord>('/stocks', signal);
-}
-
-export function listInventoryProducts(signal?: AbortSignal) {
-  return getAllPages<Product>('/products', signal);
+  const rows = [...first.data];
+  for (let page = 2; page <= first.meta.totalPages; page += 1) {
+    const result = await apiRequest<PageResult<InventoryStockRecord>>(
+      `/stocks${encodeQuery({ productIds: productIds.join(','), page, limit: 100 })}`,
+      { signal },
+    );
+    rows.push(...result.data);
+  }
+  return rows;
 }
 
 export function createStock(payload: CreateStockPayload) {
@@ -97,4 +101,11 @@ export function updateStockSalePrice(id: string, salePrice: string) {
       body: { salePrice },
     },
   );
+}
+
+export function updateStock(id: string, payload: UpdateStockPayload) {
+  return apiRequest<InventoryStockRecord>(`/stocks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: payload,
+  });
 }

@@ -3,7 +3,6 @@ import { isKnownMeasuringUnit } from '../../lib/api/measurement-units';
 
 export interface ProductFormValues {
   name: string;
-  nickname: string;
   marketName: string;
   imageUrl: string;
   imagePath: string;
@@ -17,11 +16,6 @@ export interface ProductFormValues {
   measuringUnitCustom: boolean;
   packSize: string;
   pcsPerCarton: string;
-  retailPrice: string;
-  salePrice: string;
-  purchasePrice: string;
-  isPricePrinted: boolean;
-  printedPrice: string;
   hasVariants: boolean;
   description: string;
   isActive: boolean;
@@ -29,7 +23,6 @@ export interface ProductFormValues {
 
 export const emptyProductFormValues: ProductFormValues = {
   name: '',
-  nickname: '',
   marketName: '',
   imageUrl: '',
   imagePath: '',
@@ -43,11 +36,6 @@ export const emptyProductFormValues: ProductFormValues = {
   measuringUnitCustom: false,
   packSize: '',
   pcsPerCarton: '',
-  retailPrice: '',
-  salePrice: '',
-  purchasePrice: '',
-  isPricePrinted: false,
-  printedPrice: '',
   hasVariants: false,
   description: '',
   isActive: true,
@@ -56,8 +44,7 @@ export const emptyProductFormValues: ProductFormValues = {
 export function productToFormValues(product: Product): ProductFormValues {
   return {
     name: product.name,
-    nickname: product.nickname ?? '',
-    marketName: product.marketName ?? '',
+    marketName: product.marketName ?? product.nickname ?? '',
     imageUrl: product.imageUrl ?? '',
     imagePath: product.imagePath ?? '',
     sku: product.sku ?? '',
@@ -71,11 +58,6 @@ export function productToFormValues(product: Product): ProductFormValues {
       Boolean(product.measuringUnit) && !isKnownMeasuringUnit(product.measuringUnit ?? ''),
     packSize: product.packSize ?? '',
     pcsPerCarton: product.pcsPerCarton?.toString() ?? '',
-    retailPrice: product.retailPrice ?? '',
-    salePrice: product.salePrice ?? '',
-    purchasePrice: product.purchasePrice ?? '',
-    isPricePrinted: product.isPricePrinted,
-    printedPrice: product.printedPrice ?? '',
     hasVariants: product.hasVariants,
     description: product.description ?? '',
     isActive: product.isActive,
@@ -90,8 +72,8 @@ export function validateProductForm(
   if (values.name.trim().length > 255) {
     errors.name = 'Product name must be 255 characters or fewer.';
   }
-  for (const field of ['nickname', 'marketName'] as const) {
-    if (values[field].length > 255) errors[field] = 'Value must be 255 characters or fewer.';
+  if (values.marketName.length > 255) {
+    errors.marketName = 'Value must be 255 characters or fewer.';
   }
   if (values.imageUrl.trim()) {
     try {
@@ -121,21 +103,12 @@ export function validateProductForm(
     errors.packSize = 'Pack size must be 100 characters or fewer.';
   }
 
-  for (const field of ['retailPrice', 'salePrice', 'purchasePrice', 'printedPrice'] as const) {
-    const value = values[field].trim();
-    if (value && !/^\d{1,10}(?:\.\d{1,2})?$/.test(value)) {
-      errors[field] = 'Enter an amount with up to 10 whole digits and 2 decimal places.';
-    }
-  }
   if (values.pcsPerCarton && (
     !/^\d+$/.test(values.pcsPerCarton) ||
     Number(values.pcsPerCarton) < 1 ||
     Number(values.pcsPerCarton) > 2147483647
   )) {
     errors.pcsPerCarton = 'Enter a whole number from 1 to 2,147,483,647.';
-  }
-  if (values.isPricePrinted && !values.printedPrice.trim()) {
-    errors.printedPrice = 'Enter the printed price for this product.';
   }
   if (values.subCategoryId && !values.categoryId) {
     errors.subCategoryId = 'Select a category before selecting a subcategory.';
@@ -147,8 +120,9 @@ export function productFormToPayload(
   values: ProductFormValues,
 ): ProductPayload {
   const payload: ProductPayload = { name: values.name };
-  payload.nickname = values.nickname.trim() || null;
-  payload.marketName = values.marketName.trim() || null;
+  const marketName = values.marketName.trim() || null;
+  payload.nickname = marketName;
+  payload.marketName = marketName;
   payload.imageUrl = values.imageUrl.trim() || null;
   setOptional(payload, 'sku', values.sku.trim());
   setOptional(payload, 'barcode', values.barcode.trim());
@@ -159,14 +133,9 @@ export function productFormToPayload(
   payload.subCategoryId = values.subCategoryId || null;
   payload.companyId = values.companyId || null;
   payload.vendorId = values.vendorId || null;
-  payload.isPricePrinted = values.isPricePrinted;
   payload.hasVariants = values.hasVariants;
   payload.isActive = values.isActive;
 
-  for (const field of ['retailPrice', 'salePrice', 'purchasePrice', 'printedPrice'] as const) {
-    const amount = values[field].trim();
-    if (amount) payload[field] = amount;
-  }
   if (values.pcsPerCarton) {
     payload.pcsPerCarton = Number(values.pcsPerCarton);
   }

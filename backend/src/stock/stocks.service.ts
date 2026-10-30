@@ -64,7 +64,9 @@ export class StocksService {
     page?: number;
     limit?: number;
     search?: string;
+    categoryId?: string;
     productId?: string;
+    productIds?: string[];
     vendorId?: string;
   }) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -72,12 +74,22 @@ export class StocksService {
 
     const qb = this.repo.createQueryBuilder('s').where('s.deletedAt IS NULL');
     qb.leftJoinAndSelect('s.product', 'product');
+    qb.leftJoin('product.category', 'category');
     qb.leftJoinAndSelect('s.vendor', 'vendor');
     qb.leftJoinAndSelect('s.company', 'company');
 
     if (query.productId) qb.andWhere('s.productId = :productId', { productId: query.productId });
+    if (query.productIds?.length) {
+      qb.andWhere('s.productId IN (:...productIds)', { productIds: query.productIds });
+    }
     if (query.vendorId) qb.andWhere('s.vendorId = :vendorId', { vendorId: query.vendorId });
-    if (query.search) qb.andWhere('product.name ILIKE :search', { search: `%${query.search}%` });
+    if (query.search) {
+      qb.andWhere(
+        '(product.name ILIKE :search OR product.nickname ILIKE :search OR product.marketName ILIKE :search OR product.sku ILIKE :search OR product.barcode ILIKE :search OR category.name ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
+    }
+    if (query.categoryId) qb.andWhere('product.categoryId = :categoryId', { categoryId: query.categoryId });
 
     const [data, total] = await qb.orderBy('s.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();
     const totalPages = Math.ceil(total / limit) || 1;
@@ -110,13 +122,10 @@ export class StocksService {
     if (!product) throw new BadRequestException('Product not found');
     if (
       dto.minimumQuantity !== undefined &&
+      dto.minimumQuantity !== null &&
       !isValidQuantityForUnit(dto.minimumQuantity, product.measuringUnit)
     ) {
       throw new BadRequestException('Low-stock threshold must be a whole number for this measuring unit');
-    }
-
-    if (!dto.vendorId && !dto.companyId && !stock.vendorId && !stock.companyId) {
-      throw new BadRequestException('Either vendorId or companyId must be provided');
     }
 
     if (dto.vendorId) {

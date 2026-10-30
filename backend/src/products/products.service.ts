@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Brackets, IsNull, Repository } from 'typeorm';
 import { Product } from './product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -60,7 +60,13 @@ export class ProductsService {
     }
   }
 
-  async findAll(query: { page?: number; limit?: number; search?: string; isActive?: string }) {
+  async findAll(query: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    categoryId?: string;
+    isActive?: string;
+  }) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
 
@@ -68,7 +74,21 @@ export class ProductsService {
     qb.leftJoinAndSelect('p.category', 'category');
     qb.leftJoinAndSelect('p.subCategory', 'subCategory');
 
-    if (query.search) qb.andWhere('p.name ILIKE :search', { search: `%${query.search}%` });
+    if (query.search) {
+      qb.andWhere(
+        new Brackets((searchQuery) => {
+          searchQuery
+            .where('p.name ILIKE :search')
+            .orWhere('p.nickname ILIKE :search')
+            .orWhere('p.marketName ILIKE :search')
+            .orWhere('p.sku ILIKE :search')
+            .orWhere('p.barcode ILIKE :search')
+            .orWhere('category.name ILIKE :search');
+        }),
+        { search: `%${query.search}%` },
+      );
+    }
+    if (query.categoryId) qb.andWhere('p.categoryId = :categoryId', { categoryId: query.categoryId });
     if (query.isActive !== undefined) qb.andWhere('p.isActive = :isActive', { isActive: query.isActive === 'true' });
 
     const [data, total] = await qb.orderBy('p.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();
@@ -97,13 +117,13 @@ export class ProductsService {
     const imageUrlChanged =
       dto.imageUrl !== undefined && dto.imageUrl !== product.imageUrl;
 
-    if ((dto as any).categoryId) {
-      const cat = await this.categoryRepo.findOne({ where: { id: (dto as any).categoryId, deletedAt: IsNull(), isActive: true } });
+    if (dto.categoryId) {
+      const cat = await this.categoryRepo.findOne({ where: { id: dto.categoryId, deletedAt: IsNull(), isActive: true } });
       if (!cat) throw new BadRequestException('Category not found or inactive');
     }
 
-    if ((dto as any).subCategoryId) {
-      const sub = await this.subRepo.findOne({ where: { id: (dto as any).subCategoryId, deletedAt: IsNull(), isActive: true } });
+    if (dto.subCategoryId) {
+      const sub = await this.subRepo.findOne({ where: { id: dto.subCategoryId, deletedAt: IsNull(), isActive: true } });
       if (!sub) throw new BadRequestException('SubCategory not found or inactive');
     }
 

@@ -12,13 +12,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { FeedbackState } from '../../components/ui/FeedbackState';
 import { Input } from '../../components/ui/Input';
+import { Pagination } from '../../components/ui/Pagination';
 import { Select } from '../../components/ui/Select';
 import { getActiveCategories } from '../../lib/api/catalog.api';
 import type { CategoryOption } from '../../lib/api/catalog.types';
 import { formatRupees } from '../../lib/api/money';
-import { listAllActiveProducts } from '../../lib/api/products.api';
+import { listProducts } from '../../lib/api/products.api';
 import type { Product } from '../../lib/api/products.types';
-import { listInventoryStocks, type InventoryStockRecord } from '../../lib/api/stocks.api';
+import { listStocksForProducts, type InventoryStockRecord } from '../../lib/api/stocks.api';
 import { isWholeQuantityUnit as isWholeSaleUnit } from '../../lib/api/measurement-units';
 import {
   emptySaleDraft,
@@ -41,6 +42,7 @@ interface SaleProduct {
 }
 
 const PAGE_COLUMNS = 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3';
+const PRODUCT_PAGE_SIZE = 50;
 
 function formatQuantity(value: bigint): string {
   const whole = value / 100n;
@@ -64,9 +66,12 @@ export function NewSalePage() {
   const [initialDraftState] = useState(readDraftState);
   const [draft, setDraft] = useState<SaleDraft>(initialDraftState.draft);
   const [products, setProducts] = useState<SaleProduct[]>([]);
+  const [productMeta, setProductMeta] = useState({ page: 1, limit: PRODUCT_PAGE_SIZE, total: 0, totalPages: 1 });
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [draftError, setDraftError] = useState(initialDraftState.error);
@@ -74,16 +79,50 @@ export function NewSalePage() {
   const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setQuery(search.trim());
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    getActiveCategories(controller.signal)
+      .then((categoryRows) => {
+        if (active) setCategories(categoryRows);
+      })
+      .catch((error: unknown) => {
+        if (!active || (error instanceof DOMException && error.name === 'AbortError')) return;
+        setLoadError(error instanceof Error ? error.message : 'Could not load categories.');
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     let active = true;
     setLoading(true);
     setLoadError('');
     Promise.all([
-      listAllActiveProducts(controller.signal),
-      listInventoryStocks(controller.signal),
-      getActiveCategories(controller.signal),
+      listProducts({
+        page,
+        limit: PRODUCT_PAGE_SIZE,
+        isActive: 'true',
+        search: query || undefined,
+        categoryId: categoryId || undefined,
+      }, controller.signal),
     ])
-      .then(([catalog, stockRows, categoryRows]) => {
+      .then(async ([catalogResult]) => {
+        if (!active) return;
+        const stockRows = await listStocksForProducts(
+          catalogResult.data.map((product) => product.id),
+          controller.signal,
+        );
         if (!active) return;
         const byProduct = new Map<string, InventoryStockRecord[]>();
         for (const stock of stockRows) {
@@ -92,7 +131,7 @@ export function NewSalePage() {
           byProduct.set(stock.productId, group);
         }
         setProducts(
-          catalog.map((product) => {
+          catalogResult.data.map((product) => {
             const stocks = (byProduct.get(product.id) ?? []).filter(
               (stock) => parseQuantity(stock.remainingQuantity) > 0n,
             );
@@ -106,7 +145,7 @@ export function NewSalePage() {
             };
           }),
         );
-        setCategories(categoryRows);
+        setProductMeta(catalogResult.meta);
       })
       .catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === 'AbortError')) return;
@@ -119,19 +158,7 @@ export function NewSalePage() {
       active = false;
       controller.abort();
     };
-  }, [reload]);
-
-  const filteredProducts = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase();
-    return products.filter(({ product }) => {
-      const matchesSearch =
-        !term ||
-        product.name.toLocaleLowerCase().includes(term) ||
-        (product.sku ?? '').toLocaleLowerCase().includes(term) ||
-        (product.barcode ?? '').toLocaleLowerCase().includes(term);
-      return matchesSearch && (!categoryId || product.categoryId === categoryId);
-    });
-  }, [categoryId, products, search]);
+  }, [categoryId, page, query, reload]);
 
   const lineTotals = useMemo(
     () => draft.lines.map(saleLineTotalCents),
@@ -255,7 +282,7 @@ export function NewSalePage() {
 
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter') return;
-    const matches = filteredProducts.filter(({ stocks }) => stocks.length > 0);
+    const matches = products.filter(({ stocks }) => stocks.length > 0);
     if (matches.length === 1) {
       event.preventDefault();
       addProduct(matches[0]!);
@@ -327,7 +354,7 @@ export function NewSalePage() {
               </div>
               <div className="flex items-center gap-2">
                 <Search size={15} className="text-slate-400" />
-                <Select aria-label="Filter products by category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="min-w-44">
+                <Select aria-label="Filter products by category" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} className="min-w-44">
                   <option value="">All categories</option>
                   {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </Select>
@@ -336,11 +363,11 @@ export function NewSalePage() {
 
             {loading ? (
               <FeedbackState tone="loading" title="Loading products" description="Checking current inventory availability." />
-            ) : filteredProducts.length === 0 ? (
+            ) : products.length === 0 ? (
               <FeedbackState tone="empty" title="No matching products" description={search ? 'Try a product name, SKU, barcode, or a different category.' : 'No active products are available in this category.'} />
             ) : (
               <div className={`grid ${PAGE_COLUMNS} gap-3`}>
-                {filteredProducts.map((entry) => {
+                {products.map((entry) => {
                   const available = entry.availableHundredths > 0n;
                   const firstStock = entry.stocks[0];
                   const categoryName = entry.product.category?.name;
@@ -349,7 +376,7 @@ export function NewSalePage() {
                       <div className="min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <h2 className="line-clamp-2 text-sm font-semibold text-slate-900">{entry.product.name}</h2>
-                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${available ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                          <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${available ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                             {available ? `${formatQuantity(entry.availableHundredths)} ${entry.product.measuringUnit ?? 'units'}` : 'Out of stock'}
                           </span>
                         </div>
@@ -368,6 +395,17 @@ export function NewSalePage() {
                     </article>
                   );
                 })}
+              </div>
+            )}
+            {!loading && !loadError && productMeta.total > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <Pagination
+                  page={page}
+                  totalPages={productMeta.totalPages}
+                  totalItems={productMeta.total}
+                  pageSize={PRODUCT_PAGE_SIZE}
+                  onPageChange={setPage}
+                />
               </div>
             )}
           </section>

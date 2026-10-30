@@ -59,5 +59,6 @@ export interface ProductListQuery {
   page: number;
   limit: number;
   search?: string;
+  categoryId?: string;
   isActive?: 'true' | 'false';
 }

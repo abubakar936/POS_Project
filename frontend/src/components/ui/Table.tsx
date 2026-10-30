@@ -4,17 +4,41 @@ interface TableProps {
   headers: string[];
   children: ReactNode;
   caption?: string;
+  containerClassName?: string;
+  headerClassName?: string;
+  headerCellClassName?: string;
+  stickyLastColumn?: boolean;
 }
 
-export function Table({ headers, children, caption }: TableProps) {
+export function Table({
+  headers,
+  children,
+  caption,
+  containerClassName = '',
+  headerClassName = '',
+  headerCellClassName = '',
+  stickyLastColumn = false,
+}: TableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[600px] border-collapse text-left">
+    <div className={`overflow-x-auto ${containerClassName}`}>
+      <table className={`w-full min-w-[600px] border-collapse text-left ${
+        stickyLastColumn
+          ? '[&_tbody_td:last-child]:sticky [&_tbody_td:last-child]:right-0 [&_tbody_td:last-child]:z-10 [&_tbody_td:last-child]:bg-white'
+          : ''
+      }`}>
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
-          <tr className="border-y border-slate-100 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            {headers.map((header) => (
-              <th key={header} scope="col" className="px-4 py-3 first:pl-5 last:pr-5">
+          <tr className={`border-y border-slate-100 text-[11px] font-medium uppercase tracking-wide text-slate-400 ${headerClassName}`}>
+            {headers.map((header, index) => (
+              <th
+                key={header}
+                scope="col"
+                className={`px-4 py-3 first:pl-5 last:pr-5 ${headerCellClassName} ${
+                  stickyLastColumn && index === headers.length - 1
+                    ? 'sticky right-0 z-20'
+                    : ''
+                }`}
+              >
                 {header}
               </th>
             ))}
