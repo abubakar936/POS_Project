@@ -26,10 +26,12 @@ import { Order } from './order.entity';
 import { isValidQuantityForUnit } from '../common/measurement-unit.util';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { Role } from '../users/enums/role.enum';
+import { nextBusinessNumber } from '../common/business-number.util';
 
 interface PreparedItem {
   product: Product;
-  stock: Stock;
+  stock: Stock | null;
+  soldUnavailable: boolean;
   quantity: bigint;
   salePrice: bigint;
   discount: bigint;
@@ -92,13 +94,22 @@ export class OrdersService {
         }
       }
       const customer = await this.resolveCustomer(manager, dto.customerId);
-      const items = await this.prepareItems(manager, dto.items, undefined, user);
+      const items = await this.prepareItems(
+        manager,
+        dto.items,
+        undefined,
+        user,
+        true,
+      );
       const requestedByStock = this.sumQuantitiesByStock(items);
       const stocks = [
-        ...new Map(items.map((item) => [item.stock.id, item.stock])).values(),
+        ...new Map(
+          items
+            .filter((item) => item.stock)
+            .map((item) => [item.stock!.id, item.stock!]),
+        ).values(),
       ];
       this.assertStockAvailability(stocks, requestedByStock);
-
       const summary = this.calculateSummary(
         items,
         parseScaledDecimal(dto.discountAmount ?? '0', 2),
@@ -107,6 +118,11 @@ export class OrdersService {
 
       const order = manager.getRepository(Order).create({
         orderNumber,
+        saleNumber: await nextBusinessNumber(
+          manager,
+          'sale_number_seq',
+          'SALE',
+        ),
         customerId: customer?.id ?? null,
         customer,
         customerName: customer
@@ -130,7 +146,8 @@ export class OrdersService {
           manager.getRepository(OrderItem).create({
             orderId: savedOrder.id,
             productId: item.product.id,
-            stockId: item.stock.id,
+            stockId: item.stock?.id ?? null,
+            soldUnavailable: item.soldUnavailable,
             productName: item.product.name,
             productSku: item.product.sku ?? null,
             quantity: formatScaledDecimal(item.quantity, 2),
@@ -147,7 +164,11 @@ export class OrdersService {
       const invoiceRepo = manager.getRepository(Invoice);
       const invoice = await invoiceRepo.save(
         invoiceRepo.create({
-          invoiceNumber: `INV-${randomUUID().toUpperCase()}`,
+          invoiceNumber: await nextBusinessNumber(
+            manager,
+            'invoice_number_seq',
+            'INV',
+          ),
           orderId: savedOrder.id,
           customerId: savedOrder.customerId ?? null,
           customerName: savedOrder.customerName ?? null,
@@ -198,11 +219,12 @@ export class OrdersService {
       .createQueryBuilder('order')
       .leftJoinAndSelect('order.customer', 'customer')
       .leftJoinAndSelect('order.items', 'item')
+      .leftJoinAndSelect('order.invoice', 'invoice')
       .where('order.deletedAt IS NULL');
 
     if (query.search) {
       qb.andWhere(
-        '(order.orderNumber ILIKE :search OR order.customerName ILIKE :search OR order.customerPhone ILIKE :search)',
+        '(order.saleNumber ILIKE :search OR order.orderNumber ILIKE :search OR order.customerName ILIKE :search OR order.customerPhone ILIKE :search)',
         { search: `%${query.search}%` },
       );
     }
@@ -228,6 +250,7 @@ export class OrdersService {
       .createQueryBuilder('order')
       .leftJoinAndSelect('order.customer', 'customer')
       .leftJoinAndSelect('order.items', 'item')
+      .leftJoinAndSelect('order.invoice', 'invoice')
       .leftJoinAndSelect('item.product', 'product')
       .leftJoinAndSelect('item.stock', 'stock')
       .where('order.id = :id', { id })
@@ -290,10 +313,13 @@ export class OrdersService {
         const stockIds = [
           ...new Set([
             ...oldQuantities.keys(),
-            ...dto.items.map((item) => item.stockId),
+            ...dto.items.flatMap((item) => item.stockId ? [item.stockId] : []),
           ]),
         ];
-        const stocks = await this.lockStocks(manager, stockIds, true);
+        const unavailableProductIds = dto.items
+          .filter((item) => item.soldUnavailable)
+          .map((item) => item.productId);
+        const stocks = await this.lockSaleStocks(manager, stockIds, unavailableProductIds, true);
         items = await this.prepareItems(manager, dto.items, stocks);
         const newQuantities = this.sumQuantitiesByStock(items);
         this.assertStockAvailability(stocks, newQuantities, oldQuantities);
@@ -306,7 +332,8 @@ export class OrdersService {
             itemRepo.create({
               orderId: id,
               productId: item.product.id,
-              stockId: item.stock.id,
+              stockId: item.stock?.id ?? null,
+              soldUnavailable: item.soldUnavailable,
               productName: item.product.name,
               productSku: item.product.sku ?? null,
               quantity: formatScaledDecimal(item.quantity, 2),
@@ -393,6 +420,7 @@ export class OrdersService {
       .createQueryBuilder('order')
       .leftJoinAndSelect('order.customer', 'customer')
       .leftJoinAndSelect('order.items', 'item')
+      .leftJoinAndSelect('order.invoice', 'invoice')
       .leftJoinAndSelect('item.product', 'product')
       .leftJoinAndSelect('item.stock', 'stock')
       .where('order.id = :id', { id })
@@ -418,9 +446,8 @@ export class OrdersService {
     requestedItems: CreateOrderItemDto[],
     lockedStocks?: Stock[],
     user?: JwtPayload,
+    lockUnavailableProducts = false,
   ): Promise<PreparedItem[]> {
-    const stockIds = [...new Set(requestedItems.map((item) => item.stockId))];
-    const stocks = lockedStocks ?? (await this.lockStocks(manager, stockIds));
     const products = await manager.getRepository(Product).find({
       where: {
         id: In(this.unique(requestedItems.map((item) => item.productId))),
@@ -431,20 +458,38 @@ export class OrdersService {
     const productsById = new Map(
       products.map((product) => [product.id, product]),
     );
+    const stockIds = this.unique(
+      requestedItems.flatMap((item) => item.stockId ? [item.stockId] : []),
+    );
+    const unavailableProductIds = lockUnavailableProducts
+      ? this.unique(requestedItems.filter((item) => item.soldUnavailable).map((item) => item.productId))
+      : [];
+    const stocks = lockedStocks ?? (await this.lockSaleStocks(manager, stockIds, unavailableProductIds));
     const stocksById = new Map(stocks.map((stock) => [stock.id, stock]));
 
     return requestedItems.map((requested) => {
       const product = productsById.get(requested.productId);
-      const stock = stocksById.get(requested.stockId);
       if (!product)
         throw new BadRequestException('Product not found or inactive');
-      if (!stock || stock.productId !== product.id) {
-        throw new BadRequestException(
-          'Stock does not belong to the selected product',
-        );
+      let stock: Stock | null = null;
+      if (requested.soldUnavailable) {
+        if (requested.stockId) {
+          throw new BadRequestException('Unavailable sale items cannot reference a stock lot');
+        }
+        const remaining = stocks
+          .filter((record) => record.productId === product.id && !record.deletedAt)
+          .reduce((sum, record) => sum + parseScaledDecimal(record.remainingQuantity, 2), 0n);
+        if (remaining > 0n) {
+          throw new BadRequestException('Unavailable sale items are only allowed when the product has no available stock');
+        }
+      } else {
+        stock = requested.stockId ? stocksById.get(requested.stockId) ?? null : null;
+        if (!stock || stock.productId !== product.id) {
+          throw new BadRequestException('Stock does not belong to the selected product');
+        }
+        if (stock.deletedAt)
+          throw new BadRequestException('Stock not found or inactive');
       }
-      if (stock.deletedAt)
-        throw new BadRequestException('Stock not found or inactive');
 
       const quantity = parseScaledDecimal(requested.quantity, 2);
       if (quantity <= 0n)
@@ -454,13 +499,27 @@ export class OrdersService {
           `Quantity must be a whole number for measuring unit ${product.measuringUnit}`,
         );
       }
-      if (requested.salePrice !== undefined && user?.role !== Role.Admin) {
+      if (
+        requested.salePrice !== undefined &&
+        user?.role !== Role.Admin &&
+        !requested.soldUnavailable
+      ) {
         throw new BadRequestException(
           'Only administrators may override sale prices',
         );
       }
+      const defaultSalePrice = stock?.salePrice ?? product.salePrice;
+      if (
+        requested.soldUnavailable &&
+        requested.salePrice === undefined &&
+        defaultSalePrice == null
+      ) {
+        throw new BadRequestException(
+          'A sale price is required for unavailable products',
+        );
+      }
       const salePrice = parseScaledDecimal(
-        requested.salePrice ?? stock.salePrice,
+        requested.salePrice ?? defaultSalePrice ?? '0.00',
         2,
       );
       const discount = parseScaledDecimal(requested.discountAmount ?? '0', 2);
@@ -472,7 +531,15 @@ export class OrdersService {
         throw new BadRequestException('Order item amount is too large');
       }
 
-      return { product, stock, quantity, salePrice, discount, lineTotal };
+      return {
+        product,
+        stock,
+        soldUnavailable: requested.soldUnavailable ?? false,
+        quantity,
+        salePrice,
+        discount,
+        lineTotal,
+      };
     });
   }
 
@@ -480,10 +547,13 @@ export class OrdersService {
     manager: EntityManager,
     existingItems: OrderItem[],
   ): Promise<PreparedItem[]> {
-    const stocks = await manager.getRepository(Stock).find({
-      withDeleted: true,
-      where: { id: In(this.unique(existingItems.map((item) => item.stockId))) },
-    });
+    const stockIds = this.unique(existingItems.flatMap((item) => item.stockId ? [item.stockId] : []));
+    const stocks = stockIds.length
+      ? await manager.getRepository(Stock).find({
+          withDeleted: true,
+          where: { id: In(stockIds) },
+        })
+      : [];
     const stocksById = new Map(stocks.map((stock) => [stock.id, stock]));
     const products = await manager.getRepository(Product).find({
       withDeleted: true,
@@ -496,9 +566,9 @@ export class OrdersService {
     );
 
     return existingItems.map((item) => {
-      const stock = stocksById.get(item.stockId);
+      const stock = item.stockId ? stocksById.get(item.stockId) ?? null : null;
       const product = productsById.get(item.productId);
-      if (!stock || !product) {
+      if ((!stock && !item.soldUnavailable) || !product) {
         throw new ConflictException(
           'Order items reference missing stock or product',
         );
@@ -509,6 +579,7 @@ export class OrdersService {
       return {
         product,
         stock,
+        soldUnavailable: item.soldUnavailable,
         quantity,
         salePrice,
         discount,
@@ -541,7 +612,9 @@ export class OrdersService {
   private sumQuantitiesByStock(items: PreparedItem[] | OrderItem[]) {
     const totals = new Map<string, bigint>();
     for (const item of items) {
-      const stockId = this.isPreparedItem(item) ? item.stock.id : item.stockId;
+      if (item.soldUnavailable) continue;
+      const stockId = this.isPreparedItem(item) ? item.stock?.id : item.stockId;
+      if (!stockId) continue;
       const quantity = this.isPreparedItem(item)
         ? item.quantity
         : parseScaledDecimal(item.quantity, 2);
@@ -567,6 +640,35 @@ export class OrdersService {
       .orderBy('stock.id', 'ASC')
       .setLock('pessimistic_write');
     if (withDeleted) query.withDeleted();
+    return query.getMany();
+  }
+
+  private async lockSaleStocks(
+    manager: EntityManager,
+    stockIds: string[],
+    unavailableProductIds: string[],
+    withDeleted = false,
+  ) {
+    if (stockIds.length === 0 && unavailableProductIds.length === 0) return [];
+    const query = manager
+      .getRepository(Stock)
+      .createQueryBuilder('stock')
+      .orderBy('stock.id', 'ASC')
+      .setLock('pessimistic_write');
+    if (withDeleted) query.withDeleted();
+
+    if (stockIds.length > 0 && unavailableProductIds.length > 0) {
+      query.where(
+        '(stock.id IN (:...stockIds) OR (stock.productId IN (:...unavailableProductIds) AND stock.deletedAt IS NULL))',
+        { stockIds, unavailableProductIds },
+      );
+    } else if (stockIds.length > 0) {
+      query.where('stock.id IN (:...stockIds)', { stockIds });
+    } else {
+      query.where('stock.productId IN (:...unavailableProductIds)', {
+        unavailableProductIds,
+      }).andWhere('stock.deletedAt IS NULL');
+    }
     return query.getMany();
   }
 

@@ -28,12 +28,15 @@ export class OrderItem {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column('uuid')
-  stockId: string;
+  @Column('uuid', { nullable: true })
+  stockId?: string | null;
 
-  @ManyToOne(() => Stock, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Stock, { nullable: true, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'stockId' })
-  stock: Stock;
+  stock?: Stock | null;
+
+  @Column({ type: 'boolean', default: false })
+  soldUnavailable: boolean;
 
   @Column({ type: 'varchar', length: 255 })
   productName: string;

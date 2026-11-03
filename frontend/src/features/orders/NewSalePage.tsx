@@ -39,6 +39,7 @@ interface SaleProduct {
   product: Product;
   stocks: InventoryStockRecord[];
   availableHundredths: bigint;
+  defaultSalePrice: string;
 }
 
 const PAGE_COLUMNS = 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3';
@@ -132,12 +133,15 @@ export function NewSalePage() {
         }
         setProducts(
           catalogResult.data.map((product) => {
-            const stocks = (byProduct.get(product.id) ?? []).filter(
+            const allStocks = byProduct.get(product.id) ?? [];
+            const stocks = allStocks.filter(
               (stock) => parseQuantity(stock.remainingQuantity) > 0n,
             );
             return {
               product,
               stocks,
+              defaultSalePrice:
+                stocks[0]?.salePrice ?? allStocks[0]?.salePrice ?? product.salePrice ?? '0.00',
               availableHundredths: stocks.reduce(
                 (sum, stock) => sum + parseQuantity(stock.remainingQuantity),
                 0n,
@@ -185,6 +189,31 @@ export function NewSalePage() {
       (sum, line) => sum + parseQuantity(line.quantity),
       0n,
     );
+    if (entry.availableHundredths <= 0n) {
+      if (productLines.some((line) => !line.soldUnavailable)) return;
+      const current = productLines[0];
+      const nextLine: SaleCartLine = current
+        ? { ...current, quantity: formatQuantity(currentQuantity + 100n) }
+        : {
+            id: crypto.randomUUID(),
+            productId: entry.product.id,
+            stockId: '',
+            productName: entry.product.name,
+            sku: entry.product.sku || entry.product.barcode || '',
+            measuringUnit: entry.product.measuringUnit ?? '',
+            quantity: '1',
+            salePrice: entry.defaultSalePrice,
+            defaultSalePrice: entry.defaultSalePrice,
+            availableQuantity: '0',
+            soldUnavailable: true,
+            stockOptions: [],
+          };
+      persist({
+        ...draft,
+        lines: [...draft.lines.filter((line) => line.productId !== entry.product.id), nextLine],
+      });
+      return;
+    }
     const remaining = entry.availableHundredths - currentQuantity;
     if (remaining <= 0n) return;
     const increment = remaining < 100n ? remaining : 100n;
@@ -241,10 +270,10 @@ export function NewSalePage() {
       setQuantityErrors((current) => ({ ...current, [line.id]: 'This unit only allows whole quantities.' }));
       return;
     }
-    const sameLotUsed = draft.lines
+    const sameLotUsed = line.soldUnavailable ? 0n : draft.lines
       .filter((item) => item.stockId === line.stockId && item.id !== line.id)
       .reduce((sum, item) => sum + parseQuantity(item.quantity), 0n);
-    if (valid + sameLotUsed > parseQuantity(line.availableQuantity)) {
+    if (!line.soldUnavailable && valid + sameLotUsed > parseQuantity(line.availableQuantity)) {
       setQuantityErrors((current) => ({ ...current, [line.id]: 'Quantity exceeds the available stock for this lot.' }));
       return;
     }
@@ -282,7 +311,7 @@ export function NewSalePage() {
 
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter') return;
-    const matches = products.filter(({ stocks }) => stocks.length > 0);
+    const matches = products;
     if (matches.length === 1) {
       event.preventDefault();
       addProduct(matches[0]!);
@@ -345,7 +374,7 @@ export function NewSalePage() {
                   ref={searchRef}
                   autoFocus
                   aria-label="Search or scan a product"
-                  placeholder="Scan barcode or search name, SKU, barcode…"
+                  placeholder="Scan barcode or search name, market name, SKU…"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={onSearchKeyDown}
@@ -375,22 +404,22 @@ export function NewSalePage() {
                     <article key={entry.product.id} className={`flex min-h-36 flex-col justify-between rounded-xl border bg-white p-3 shadow-sm ${available ? 'border-slate-200' : 'border-rose-200 bg-rose-50/50'}`}>
                       <div className="min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <h2 className="line-clamp-2 text-sm font-semibold text-slate-900">{entry.product.name}</h2>
+                          <div className="min-w-0"><h2 className="line-clamp-2 text-sm font-semibold text-slate-900">{entry.product.name}</h2>{entry.product.marketName && <p className="mt-0.5 truncate text-xs text-slate-500">{entry.product.marketName}</p>}</div>
                           <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${available ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                             {available ? `${formatQuantity(entry.availableHundredths)} ${entry.product.measuringUnit ?? 'units'}` : 'Out of stock'}
                           </span>
                         </div>
                         <p className="mt-1 truncate font-mono text-[11px] text-slate-500">{entry.product.sku || entry.product.barcode || 'No SKU / barcode'}{categoryName ? ` · ${categoryName}` : ''}</p>
-                        <p className="mt-3 text-base font-bold tabular-nums text-slate-900">{firstStock ? formatRupees(firstStock.salePrice) : formatRupees(entry.product.salePrice)}</p>
-                        <p className="text-[11px] text-slate-500">{entry.product.measuringUnit || 'Unit not set'} · sale price from available stock lot</p>
+                        <p className="mt-3 text-base font-bold tabular-nums text-slate-900">{entry.defaultSalePrice === '0.00' ? 'Price not set' : formatRupees(entry.defaultSalePrice)}</p>
+                        <p className="text-[11px] text-slate-500">{entry.product.measuringUnit || 'Unit not set'} · product sale price</p>
                       </div>
                       <Button
                         className="mt-3 w-full"
-                        disabled={!available || !firstStock || draft.requestPending || Boolean(draftError)}
+                        disabled={(available && !firstStock) || draft.requestPending || Boolean(draftError)}
                         onClick={() => addProduct(entry)}
                         aria-label={`Add ${entry.product.name} to sale`}
                       >
-                        <Plus size={15} /> {available ? 'Add' : 'Unavailable'}
+                        <Plus size={15} /> {available ? 'Add' : 'Add unavailable'}
                       </Button>
                     </article>
                   );
@@ -432,6 +461,7 @@ export function NewSalePage() {
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-800">{line.productName}</p>
                           <p className="text-[11px] text-slate-500">{line.sku || 'No SKU'} · {line.measuringUnit || 'unit'} · {saleLineHasMixedPrices(line) ? 'Mixed lot prices' : formatRupees(line.salePrice)}</p>
+                          {line.soldUnavailable && <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Out of Stock</span>}
                         </div>
                         <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{formatRupees(formatCents(lineTotal))}</p>
                       </div>
@@ -451,7 +481,7 @@ export function NewSalePage() {
                           />
                           <button type="button" onClick={() => adjustQuantity(line, 1)} className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50" aria-label={`Increase quantity of ${line.productName}`}><Plus size={14} /></button>
                         </div>
-                        <span className="text-[10px] text-slate-400">Available {line.availableQuantity}</span>
+                        <span className={`text-[10px] ${line.soldUnavailable ? 'font-medium text-rose-700' : 'text-slate-400'}`}>{line.soldUnavailable ? 'Unavailable' : `Available ${line.availableQuantity}`}</span>
                         <button type="button" onClick={() => removeLine(line.id)} disabled={draft.requestPending} className="rounded-md p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700" aria-label={`Remove ${line.productName}`}><Trash2 size={15} /></button>
                       </div>
                       {error && <p role="alert" className="flex items-center gap-1 text-[11px] text-rose-700"><AlertCircle size={12} />{error}</p>}
@@ -461,10 +491,9 @@ export function NewSalePage() {
               </div>
             )}
             <div className="space-y-2 border-t border-slate-100 px-4 py-4">
-              <div className="flex justify-between text-sm text-slate-600"><span>Subtotal</span><span className="tabular-nums">{formatRupees(formatCents(subtotalCents))}</span></div>
+              <div className="flex justify-between text-sm text-slate-600"><span>Total amount</span><span className="tabular-nums">{formatRupees(formatCents(subtotalCents))}</span></div>
               <div className="flex justify-between text-sm text-slate-600"><span>Discount</span><span className="tabular-nums">−{formatRupees(formatCents(discountCents))}</span></div>
               <div className="flex justify-between border-t border-slate-100 pt-2 text-base font-bold text-slate-900"><span>Total</span><span className="tabular-nums">{formatRupees(formatCents(totalCents))}</span></div>
-              <p className="text-[11px] leading-4 text-slate-400">Tax is not supported by the current order or invoice API.</p>
               <Button
                 className="mt-2 h-11 w-full text-base"
                 disabled={draft.lines.length === 0 || Boolean(draftError) || Object.keys(quantityErrors).length > 0}

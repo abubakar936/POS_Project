@@ -37,7 +37,7 @@ export function SaleSuccessPage() {
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-slate-400">POS Invoice</p>
             <h2 className="mt-1 font-mono text-xl font-semibold text-slate-900">{sale.invoice.invoiceNumber}</h2>
-            <p className="mt-1 text-sm text-slate-500">Sale {sale.orderNumber}</p>
+            <p className="mt-1 text-sm text-slate-500">Sale {sale.saleNumber}</p>
           </div>
           <div className="text-right text-sm text-slate-600">
             <p>{new Date(sale.createdAt).toLocaleString()}</p>
@@ -53,7 +53,7 @@ export function SaleSuccessPage() {
             <tbody className="divide-y divide-slate-100">
               {sale.items.map((item) => (
                 <tr key={item.id}>
-                  <td className="py-3 font-medium text-slate-800">{item.productName}</td>
+                  <td className="py-3 font-medium text-slate-800">{item.productName}{item.soldUnavailable && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}</td>
                   <td className="py-3 text-right tabular-nums">{item.quantity}</td>
                   <td className="py-3 text-right tabular-nums">{formatRupees(item.salePrice)}</td>
                   <td className="py-3 text-right tabular-nums">{formatRupees(item.lineTotal)}</td>
@@ -64,9 +64,8 @@ export function SaleSuccessPage() {
         </div>
 
         <div className="ml-auto max-w-sm space-y-2 border-t border-slate-200 pt-4">
-          <InvoiceRow label="Subtotal" value={formatRupees(sale.subtotal)} />
+          <InvoiceRow label="Total amount" value={formatRupees(sale.subtotal)} />
           <InvoiceRow label="Discount" value={`−${formatRupees(sale.discountAmount)}`} />
-          <InvoiceRow label="Tax" value="Not supported" />
           <InvoiceRow label="Total" value={formatRupees(sale.totalAmount)} strong />
           <InvoiceRow label="Paid" value={formatRupees(sale.invoice.amountPaid)} />
           <InvoiceRow label="Balance due" value={formatRupees(sale.invoice.balanceDue)} />

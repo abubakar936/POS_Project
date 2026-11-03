@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import {
   formatScaledDecimal,
@@ -19,6 +18,7 @@ import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoicePayment } from './invoice-payment.entity';
 import { Invoice } from './invoice.entity';
+import { nextBusinessNumber } from '../common/business-number.util';
 
 @Injectable()
 export class InvoicesService {
@@ -56,7 +56,7 @@ export class InvoicesService {
       }
 
       const invoice = manager.getRepository(Invoice).create({
-        invoiceNumber: `INV-${randomUUID().toUpperCase()}`,
+        invoiceNumber: await nextBusinessNumber(manager, 'invoice_number_seq', 'INV'),
         orderId: order.id,
         customerId: order.customerId ?? null,
         customerName: order.customerName ?? null,
@@ -84,7 +84,7 @@ export class InvoicesService {
 
     if (query.search) {
       qb.andWhere(
-        '(invoice.invoiceNumber ILIKE :search OR invoice.customerName ILIKE :search OR invoice.customerPhone ILIKE :search OR order.orderNumber ILIKE :search)',
+        '(invoice.invoiceNumber ILIKE :search OR invoice.customerName ILIKE :search OR invoice.customerPhone ILIKE :search OR order.saleNumber ILIKE :search)',
         { search: `%${query.search}%` },
       );
     }

@@ -34,6 +34,14 @@ const SaleSuccessPage = lazy(() =>
 
 function RequireAuthentication() {
   const location = useLocation();
+
+  if (import.meta.env.DEV) {
+    if (!window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)) {
+      window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, 'local-dev-token');
+    }
+    return <Outlet />;
+  }
+
   if (!window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }

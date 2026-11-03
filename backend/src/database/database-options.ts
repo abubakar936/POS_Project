@@ -16,7 +16,7 @@ export type DatabaseEnvironment = Record<string, string | undefined>;
 
 export function createDatabaseOptions(
   environment: DatabaseEnvironment,
-  synchronize = environment.NODE_ENV !== 'production',
+  synchronize = false,
 ): DataSourceOptions {
   const required = (key: string) => {
     const value = environment[key];

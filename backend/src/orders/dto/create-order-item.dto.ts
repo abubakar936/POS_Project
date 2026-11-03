@@ -1,6 +1,7 @@
 import {
   IsNumberString,
   IsOptional,
+  IsBoolean,
   IsUUID,
   Matches,
 } from 'class-validator';
@@ -12,8 +13,13 @@ export class CreateOrderItemDto {
   @IsUUID()
   productId: string;
 
+  @IsOptional()
   @IsUUID()
-  stockId: string;
+  stockId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  soldUnavailable?: boolean;
 
   @IsNumberString()
   @Matches(QUANTITY_2_PLACES)

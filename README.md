@@ -13,6 +13,14 @@ npm run start:dev
 Configure the backend environment using `backend/.env.example`. Keep actual
 credentials in the ignored `backend/.env` file.
 
+Before starting the backend on an existing database, apply the current
+migrations:
+
+```powershell
+cd D:\POS_Project\backend
+npm run db:migration:run
+```
+
 ## Frontend
 
 ```powershell

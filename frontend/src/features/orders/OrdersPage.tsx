@@ -126,7 +126,7 @@ export function OrdersPage() {
     setInvoiceLoading(true);
     const [orderResult, invoiceResult] = await Promise.allSettled([
       getOrder(order.id),
-      getInvoiceForOrder(order.id, order.orderNumber),
+      getInvoiceForOrder(order.id, order.saleNumber),
     ]);
     if (orderResult.status === 'fulfilled') {
       setSelectedOrder(orderResult.value);
@@ -161,7 +161,7 @@ export function OrdersPage() {
       showToast({
         tone: 'success',
         title: 'Order removed',
-        description: `${pendingDelete.orderNumber} was removed and its stock was returned.`,
+        description: `${pendingDelete.saleNumber} was removed and its stock was returned.`,
       });
       refresh();
     } catch (error) {
@@ -227,10 +227,10 @@ export function OrdersPage() {
       <tr key={order.id} className="text-sm text-slate-600">
         <td className="px-4 py-3.5 first:pl-5">
           <p className="font-mono text-xs font-semibold text-slate-800">
-            {order.orderNumber}
+            {order.invoice?.invoiceNumber ?? order.saleNumber}
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            {order.items?.length ?? 0} line items
+            {order.items?.length ?? 0} line items{order.items?.some((item) => item.soldUnavailable) ? ' · unavailable items' : ''}
           </p>
         </td>
         <td className="px-4 py-3.5 whitespace-nowrap">
@@ -255,7 +255,7 @@ export function OrdersPage() {
           <div className="flex justify-end">
             <button
               type="button"
-              aria-label={`View order ${order.orderNumber}`}
+              aria-label={`View sale ${order.saleNumber}`}
               title="View order details"
               onClick={() => void openDetails(order)}
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
@@ -352,8 +352,7 @@ export function OrdersPage() {
           The Orders API supports pagination and search by order number,
           customer name, or phone. It does not expose date/customer filters,
           order or fulfillment states, or payment status. Payment information
-          below comes from the linked invoice when one exists. The order
-          contract has no tax fields.
+          below comes from the linked invoice when one exists.
         </p>
       </div>
 
@@ -361,7 +360,7 @@ export function OrdersPage() {
         open={selectedOrder !== null}
         onClose={() => setSelectedOrder(null)}
         title="Order details"
-        description={selectedOrder?.orderNumber}
+        description={selectedOrder?.saleNumber}
       >
         {detailLoading ? (
           <FeedbackState tone="loading" title="Loading order details" />
@@ -436,7 +435,7 @@ export function OrdersPage() {
                     {selectedOrder.items.map((item) => (
                       <tr key={item.id} className="text-slate-600">
                         <td className="px-3 py-3">
-                          <p className="font-medium text-slate-800">{item.productName}</p>
+                          <p className="font-medium text-slate-800">{item.productName}{item.soldUnavailable && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}</p>
                           {item.productSku && (
                             <p className="mt-0.5 font-mono text-[10px] text-slate-400">
                               {item.productSku}
@@ -456,7 +455,7 @@ export function OrdersPage() {
 
             <div className="ml-auto max-w-xs space-y-2 text-sm">
               <div className="flex justify-between gap-6 text-slate-500">
-                <span>Subtotal</span>
+                <span>Total amount</span>
                 <span className="tabular-nums">{formatRupees(selectedOrder.subtotal)}</span>
               </div>
               <div className="flex justify-between gap-6 text-slate-500">
@@ -564,7 +563,7 @@ export function OrdersPage() {
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Remove this order?"
-        description={`This removes ${pendingDelete?.orderNumber ?? 'this order'} from the active order list and restores its reserved quantities to stock. The server will reject the action if an invoice exists.`}
+        description={`This removes ${pendingDelete?.saleNumber ?? 'this sale'} from the active order list and restores its reserved quantities to stock. The server will reject the action if an invoice exists.`}
         confirmLabel="Remove order"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => void removeOrder()}

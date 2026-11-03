@@ -1,13 +1,17 @@
+import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { AppHeader } from './AppHeader';
 import { AppSidebar } from './AppSidebar';
 import { navigationItems } from './navigation';
 
 export function AppLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarWidth = sidebarCollapsed ? 'md:pl-[72px]' : 'md:pl-[248px]';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      <AppSidebar />
-      <div className="min-h-screen md:pl-[248px]">
+      <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)} />
+      <div className={`min-h-screen ${sidebarWidth}`}>
         <AppHeader />
         <nav
           aria-label="Mobile navigation"

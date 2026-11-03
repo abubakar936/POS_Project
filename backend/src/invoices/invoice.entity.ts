@@ -25,7 +25,7 @@ export class Invoice {
   @Column('uuid')
   orderId: string;
 
-  @OneToOne(() => Order, { onDelete: 'RESTRICT' })
+  @OneToOne(() => Order, (order) => order.invoice, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'orderId' })
   order: Order;
 

@@ -126,7 +126,7 @@ function printInvoice(invoice: InvoiceRecord): boolean {
   const itemRows = items
     .map(
       (item) => `<tr>
-        <td>${escapeHtml(item.productName)}${item.productSku ? `<small>${escapeHtml(item.productSku)}</small>` : ''}</td>
+        <td>${escapeHtml(item.productName)}${item.soldUnavailable ? '<small>Unavailable</small>' : ''}${item.productSku ? `<small>${escapeHtml(item.productSku)}</small>` : ''}</td>
         <td class="num">${escapeHtml(item.quantity)}</td>
         <td class="num">${escapeHtml(formatRupees(item.salePrice))}</td>
         <td class="num">${escapeHtml(formatRupees(item.discountAmount))}</td>
@@ -179,7 +179,7 @@ function printInvoice(invoice: InvoiceRecord): boolean {
         <main>
           <header class="top">
             <div><h1>ShopEase POS</h1><p>Business contact and address are not available in the invoice record.</p></div>
-            <div class="meta"><h2>INVOICE</h2><p><strong>${escapeHtml(invoice.invoiceNumber)}</strong></p><p>Issued ${escapeHtml(formatDate(invoice.createdAt))}</p><p>Order ${escapeHtml(invoice.order?.orderNumber ?? '—')}</p></div>
+            <div class="meta"><h2>INVOICE</h2><p><strong>${escapeHtml(invoice.invoiceNumber)}</strong></p><p>Issued ${escapeHtml(formatDate(invoice.createdAt))}</p><p>Sale ${escapeHtml(invoice.order?.saleNumber ?? '—')}</p></div>
           </header>
           <section class="details">
             <div><div class="label">Bill to</div><h2>${escapeHtml(invoice.customerName || 'Walk-in customer')}</h2><p>${escapeHtml(invoice.customerPhone || '')}</p><p>${escapeHtml(invoice.customerAddress || '')}</p></div>
@@ -190,14 +190,13 @@ function printInvoice(invoice: InvoiceRecord): boolean {
             <tbody>${itemRows || '<tr><td colspan="5">Item details were not returned by the API.</td></tr>'}</tbody>
           </table>
           <table class="totals">
-            <tr><td>Subtotal</td><td class="num">${escapeHtml(formatRupees(invoice.subtotal))}</td></tr>
+            <tr><td>Total amount</td><td class="num">${escapeHtml(formatRupees(invoice.subtotal))}</td></tr>
             <tr><td>Item discounts</td><td class="num">−${escapeHtml(formatRupees(invoice.itemDiscountAmount))}</td></tr>
             <tr><td>Invoice discount</td><td class="num">−${escapeHtml(formatRupees(invoice.discountAmount))}</td></tr>
             <tr class="grand"><td>Total</td><td class="num">${escapeHtml(formatRupees(invoice.totalAmount))}</td></tr>
           </table>
           ${paymentRows ? `<section class="section"><div class="label">Payment records</div><table><thead><tr><th>Date</th><th>Method / reference</th><th class="num">Amount</th></tr></thead><tbody>${paymentRows}</tbody></table></section>` : ''}
           ${invoice.note ? `<p class="section"><strong>Note:</strong> ${escapeHtml(invoice.note)}</p>` : ''}
-          <footer class="notice">Tax is not separately represented in the available order and invoice data. The invoice totals above are the values returned by the POS server.</footer>
         </main>
       </body>
     </html>`);
@@ -349,9 +348,9 @@ export function InvoicesPage() {
     setCreating(true);
     setCreateError('');
     try {
-      const existing = await getInvoiceForOrder(selectedOrder.id, selectedOrder.orderNumber);
+      const existing = await getInvoiceForOrder(selectedOrder.id, selectedOrder.saleNumber);
       if (existing) {
-        throw new Error(`An invoice (${existing.invoiceNumber}) already exists for ${selectedOrder.orderNumber}.`);
+        throw new Error(`An invoice (${existing.invoiceNumber}) already exists for ${selectedOrder.saleNumber}.`);
       }
       const created = await createInvoice({
         orderId: selectedOrder.id,
@@ -363,7 +362,7 @@ export function InvoicesPage() {
       showToast({
         tone: 'success',
         title: 'Invoice created',
-        description: `${created.invoiceNumber} was created from ${selectedOrder.orderNumber}. No payment was recorded.`,
+        description: `${created.invoiceNumber} was created from ${selectedOrder.saleNumber}. No payment was recorded.`,
       });
       void openDetails(created);
     } catch (error) {
@@ -487,7 +486,7 @@ export function InvoicesPage() {
       <tr key={invoice.id} className="text-sm text-slate-600">
         <td className="px-4 py-3.5 first:pl-5">
           <p className="font-mono text-xs font-semibold text-slate-800">{invoice.invoiceNumber}</p>
-          <p className="mt-1 text-xs text-slate-400">{invoice.order?.orderNumber ?? 'Order unavailable'}</p>
+          <p className="mt-1 text-xs text-slate-400">{invoice.order?.saleNumber ?? 'Sale unavailable'}</p>
         </td>
         <td className="px-4 py-3.5 whitespace-nowrap">{formatDate(invoice.createdAt)}</td>
         <td className="px-4 py-3.5">
@@ -536,7 +535,7 @@ export function InvoicesPage() {
 
       <div className="flex items-start gap-2 text-xs leading-5 text-slate-500">
         <CalendarDays size={15} className="mt-0.5 shrink-0" />
-        <p>The API supports pagination and search by invoice number, order number, customer name, or phone. Date, customer, and status filters are not supported. Invoice totals and payment balances come from the server; order and invoice records do not expose itemized tax or shop contact details.</p>
+        <p>The API supports pagination and search by invoice number, sale number, customer name, or phone. Date, customer, and status filters are not supported. Invoice totals and payment balances come from the server.</p>
       </div>
 
       <Modal open={createOpen} onClose={closeCreate} title="Create invoice from order" description="An invoice snapshots one existing order. Creating it does not record or charge a payment.">
@@ -550,7 +549,7 @@ export function InvoicesPage() {
               {orders.map((order) => (
                 <button key={order.id} type="button" onClick={() => setSelectedOrder(order)} className={`flex w-full items-start justify-between gap-3 px-3 py-3 text-left ${selectedOrder?.id === order.id ? 'bg-teal-50' : 'hover:bg-slate-50'}`}>
                   <span className="min-w-0">
-                    <span className="block truncate font-mono text-xs font-semibold text-slate-800">{order.orderNumber}</span>
+                    <span className="block truncate font-mono text-xs font-semibold text-slate-800">{order.saleNumber}</span>
                     <span className="mt-1 block truncate text-xs text-slate-500">{order.customerName || 'Walk-in customer'} · {formatDate(order.createdAt)}</span>
                   </span>
                   <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-800">{formatRupees(order.totalAmount)}</span>
@@ -562,7 +561,7 @@ export function InvoicesPage() {
           {selectedOrder && (
             <form onSubmit={(event) => void submitCreate(event)} className="space-y-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4">
               <div className="flex items-start justify-between gap-3">
-                <div><p className="text-xs font-semibold text-slate-800">Selected: {selectedOrder.orderNumber}</p><p className="mt-1 text-xs text-slate-600">{selectedOrder.customerName || 'Walk-in customer'} · {formatRupees(selectedOrder.totalAmount)}</p></div>
+                <div><p className="text-xs font-semibold text-slate-800">Selected: {selectedOrder.saleNumber}</p><p className="mt-1 text-xs text-slate-600">{selectedOrder.customerName || 'Walk-in customer'} · {formatRupees(selectedOrder.totalAmount)}</p></div>
                 <ReceiptText size={17} className="text-teal-700" />
               </div>
               <label className="block text-xs font-medium text-slate-600">Due date (optional)<Input type="date" value={newInvoiceForm.dueDate} onChange={(event) => setNewInvoiceForm((form) => ({ ...form, dueDate: event.target.value }))} className="mt-1" /></label>
@@ -580,7 +579,7 @@ export function InvoicesPage() {
         {detailLoading ? <FeedbackState tone="loading" title="Loading invoice details" /> : detailError ? <FeedbackState tone="error" title="Invoice details could not be loaded" description={detailError} /> : selectedInvoice ? (
           <div className="max-h-[72vh] space-y-5 overflow-y-auto pr-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2"><StatusBadge tone={statusTone(selectedInvoice.status)}>{selectedInvoice.status.replaceAll('_', ' ')}</StatusBadge><StatusBadge tone="info">Order {selectedInvoice.order?.orderNumber ?? 'not available'}</StatusBadge></div>
+              <div className="flex flex-wrap items-center gap-2"><StatusBadge tone={statusTone(selectedInvoice.status)}>{selectedInvoice.status.replaceAll('_', ' ')}</StatusBadge><StatusBadge tone="info">Sale {selectedInvoice.order?.saleNumber ?? 'not available'}</StatusBadge></div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={() => { if (!printInvoice(selectedInvoice)) showToast({ tone: 'error', title: 'Print window blocked', description: 'Allow pop-ups for this POS site, then try printing again.' }); }}><Printer size={14} />Print</Button>
                 <Button variant="secondary" size="sm" onClick={() => openEdit(selectedInvoice)}>Edit note/date</Button>
@@ -600,12 +599,12 @@ export function InvoicesPage() {
               <h3 className="mb-2 text-sm font-semibold text-slate-800">Items ({selectedInvoice.order?.items?.length ?? 0})</h3>
               {selectedInvoice.order?.items?.length ? <div className="overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[560px] text-left text-xs">
                 <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Description</th><th className="px-3 py-2.5 text-right">Qty</th><th className="px-3 py-2.5 text-right">Unit price</th><th className="px-3 py-2.5 text-right">Discount</th><th className="px-3 py-2.5 text-right">Line total</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{selectedInvoice.order.items.map((item) => <tr key={item.id} className="text-slate-600"><td className="px-3 py-3"><p className="font-medium text-slate-800">{item.productName}</p>{item.productSku && <p className="mt-0.5 font-mono text-[10px] text-slate-400">{item.productSku}</p>}</td><td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.salePrice)}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.discountAmount)}</td><td className="px-3 py-3 text-right tabular-nums font-medium text-slate-800">{formatRupees(item.lineTotal)}</td></tr>)}</tbody>
+                <tbody className="divide-y divide-slate-100">{selectedInvoice.order.items.map((item) => <tr key={item.id} className="text-slate-600"><td className="px-3 py-3"><p className="font-medium text-slate-800">{item.productName}</p>{item.soldUnavailable && <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}{item.productSku && <p className="mt-0.5 font-mono text-[10px] text-slate-400">{item.productSku}</p>}</td><td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.salePrice)}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.discountAmount)}</td><td className="px-3 py-3 text-right tabular-nums font-medium text-slate-800">{formatRupees(item.lineTotal)}</td></tr>)}</tbody>
               </table></div> : <FeedbackState tone="empty" title="Line items unavailable" description="The invoice detail response did not include order items." />}
             </div>
 
             <div className="ml-auto max-w-xs space-y-2 text-sm">
-              <div className="flex justify-between gap-6 text-slate-500"><span>Subtotal</span><span className="tabular-nums">{formatRupees(selectedInvoice.subtotal)}</span></div>
+              <div className="flex justify-between gap-6 text-slate-500"><span>Total amount</span><span className="tabular-nums">{formatRupees(selectedInvoice.subtotal)}</span></div>
               <div className="flex justify-between gap-6 text-slate-500"><span>Item discounts</span><span className="tabular-nums">−{formatRupees(selectedInvoice.itemDiscountAmount)}</span></div>
               <div className="flex justify-between gap-6 text-slate-500"><span>Invoice discount</span><span className="tabular-nums">−{formatRupees(selectedInvoice.discountAmount)}</span></div>
               <div className="flex justify-between gap-6 border-t border-slate-200 pt-2 font-semibold text-slate-900"><span>Total</span><span className="tabular-nums">{formatRupees(selectedInvoice.totalAmount)}</span></div>
@@ -620,7 +619,7 @@ export function InvoicesPage() {
             {selectedInvoice.note && <div className="rounded-lg border border-slate-100 p-3"><p className="text-xs font-medium text-slate-500">Invoice note</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{selectedInvoice.note}</p></div>}
 
             <div className="space-y-2 border-t border-slate-100 pt-4">
-              <p className="text-xs leading-5 text-slate-500">Invoice number, customer snapshot, line items, discounts, and totals are server-controlled. The API does not provide tax detail or business profile information. Invoice cancellation is not supported.</p>
+              <p className="text-xs leading-5 text-slate-500">Invoice number, customer snapshot, line items, discounts, and totals are server-controlled. Invoice cancellation is not supported.</p>
               {selectedInvoice.payments.length > 0 ? <p className="text-xs text-amber-700">This invoice cannot be deleted while active payments exist. Remove the payment records first if deletion is genuinely required.</p> : <Button variant="danger" size="sm" onClick={() => setPendingAction({ kind: 'delete-invoice', invoice: selectedInvoice })}><Trash2 size={14} />Delete invoice</Button>}
             </div>
           </div>

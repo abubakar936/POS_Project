@@ -11,6 +11,7 @@ export interface SaleCartLine {
   salePrice: string;
   defaultSalePrice: string;
   availableQuantity: string;
+  soldUnavailable?: boolean;
   stockOptions?: SaleStockOption[];
 }
 
@@ -39,7 +40,7 @@ export const emptySaleDraft = (): SaleDraft => ({
   lines: [],
   discountAmount: '0.00',
   customerId: null,
-  customerMode: null,
+  customerMode: 'walk-in',
   paymentAmount: '0.00',
   paymentMethod: 'CASH',
 });
@@ -97,6 +98,7 @@ function isSaleDraft(value: unknown): value is SaleDraft {
       typeof line.salePrice === 'string' &&
       typeof line.defaultSalePrice === 'string' &&
       typeof line.availableQuantity === 'string' &&
+      (line.soldUnavailable === undefined || typeof line.soldUnavailable === 'boolean') &&
       (line.stockOptions === undefined ||
         (Array.isArray(line.stockOptions) &&
           line.stockOptions.every((option) =>
@@ -139,7 +141,10 @@ export function lineTotalCents(quantity: string, price: string): bigint {
 export function allocateSaleQuantity(
   line: SaleCartLine,
   quantity = line.quantity,
-): Array<{ stockId: string; quantity: string; salePrice: string }> | null {
+): Array<{ stockId: string | null; quantity: string; salePrice: string }> | null {
+  if (line.soldUnavailable) {
+    return [{ stockId: null, quantity, salePrice: line.salePrice }];
+  }
   const options = line.stockOptions?.length
     ? line.stockOptions
     : [{

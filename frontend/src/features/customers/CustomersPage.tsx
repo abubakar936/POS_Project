@@ -460,7 +460,7 @@ export function CustomersPage() {
               {ordersLoading ? <FeedbackState tone="loading" title="Loading order history" /> : ordersError ? <FeedbackState tone="error" title="Order history could not be loaded" description={ordersError} /> : orders.length === 0 ? <FeedbackState tone="empty" title="No linked orders" description="No active orders are linked to this customer." /> : (
                 <div className="overflow-hidden rounded-lg border border-slate-200">
                   <Table headers={['Order', 'Date', 'Total']} caption="Customer order history">
-                    {orders.map((order) => <tr key={order.id} className="text-xs text-slate-600"><td className="px-3 py-2.5 font-mono font-medium text-slate-800">{order.orderNumber}</td><td className="px-3 py-2.5 whitespace-nowrap">{formatDate(order.createdAt)}</td><td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-800">{formatRupees(order.totalAmount)}</td></tr>)}
+                    {orders.map((order) => <tr key={order.id} className="text-xs text-slate-600"><td className="px-3 py-2.5 font-mono font-medium text-slate-800">{order.invoice?.invoiceNumber ?? order.saleNumber}</td><td className="px-3 py-2.5 whitespace-nowrap">{formatDate(order.createdAt)}</td><td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-800">{formatRupees(order.totalAmount)}</td></tr>)}
                   </Table>
                   {orderMeta.total > ORDER_PAGE_SIZE && <div className="border-t border-slate-100 px-2 py-1"><Pagination page={orderPage} totalPages={orderMeta.totalPages} totalItems={orderMeta.total} pageSize={ORDER_PAGE_SIZE} onPageChange={setOrderPage} /></div>}
                 </div>

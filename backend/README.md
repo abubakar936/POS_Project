@@ -62,9 +62,12 @@ $ npm run test:cov
 All order and invoice endpoints require the existing JWT authorization.
 
 - `POST /orders` creates an order with one or more product/stock lines. Each line
-  requires `productId`, `stockId`, and a positive `quantity`; the sale price is
-  read from the selected stock record. Optional customer details can be provided
-  with `customerId` or as `customerName`, `customerPhone`, and `customerAddress`.
+  requires `productId` and a positive `quantity`; regular lines also require
+  `stockId` and use the selected stock record's sale price. A line may instead
+  set `soldUnavailable: true` and omit `stockId` only when the product has no
+  remaining stock. These lines are recorded on the order and do not change stock.
+  Optional customer details can be provided with `customerId` or as
+  `customerName`, `customerPhone`, and `customerAddress`.
   Line discounts and the order-level `discountAmount` are amounts in the same
   currency as stock prices; the total is calculated by the API.
 - `GET /orders?page=1&limit=10&search=` lists orders; `GET /orders/:id` reads
@@ -73,6 +76,9 @@ All order and invoice endpoints require the existing JWT authorization.
 - Creating, replacing, or deleting order lines adjusts stock in the same
   database transaction. Orders cannot be edited or deleted after an invoice has
   been created for them.
+- Orders expose a sequential `saleNumber`; invoices expose a sequential
+  `invoiceNumber`, generated during finalization. Database UUIDs remain
+  relationship keys and are not display numbers.
 - `POST /invoices` creates an invoice from `{ "orderId": "<ORDER_ID>" }`.
   Invoice items, customer details, and totals are immutable snapshots of the
   order. `GET /invoices`, `GET /invoices/:id`, `PATCH /invoices/:id`, and
@@ -84,6 +90,11 @@ All order and invoice endpoints require the existing JWT authorization.
   Payments cannot exceed the invoice balance; invoice responses include
   `amountPaid`, `balanceDue`, and `status`. An invoice with active payments must
   have those payments removed before it can be deleted.
+
+Apply `1792700000000-AddSaleNumbersAndUnavailableItems` before starting the
+updated application on an existing database. It backfills readable sale and
+invoice numbers, creates persistent number sequences, and adds the
+unavailable-item flag while making the order-item stock reference nullable.
 
 ## Deployment
 

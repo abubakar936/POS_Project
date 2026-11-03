@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, CheckCircle2, Search, UserRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Plus, Search, Trash2, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -120,6 +120,21 @@ export function ReviewSalePage() {
     });
   }
 
+  function removeLine(lineId: string) {
+    if (!draft || draft.requestPending || finalizing) return;
+    persist({ ...draft, lines: draft.lines.filter((line) => line.id !== lineId) });
+    setQuantityErrors((current) => {
+      const next = { ...current };
+      delete next[lineId];
+      return next;
+    });
+    setPriceErrors((current) => {
+      const next = { ...current };
+      delete next[lineId];
+      return next;
+    });
+  }
+
   function updateQuantity(line: SaleCartLine, value: string) {
     if (!draft) return;
     if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(value)) {
@@ -135,10 +150,10 @@ export function ReviewSalePage() {
       setQuantityErrors((current) => ({ ...current, [line.id]: 'This unit only allows whole quantities.' }));
       return;
     }
-    const usedOnLot = draft.lines
+    const usedOnLot = line.soldUnavailable ? 0n : draft.lines
       .filter((item) => item.stockId === line.stockId && item.id !== line.id)
       .reduce((sum, item) => sum + parseQuantity(item.quantity), 0n);
-    if (quantity + usedOnLot > parseQuantity(line.availableQuantity)) {
+    if (!line.soldUnavailable && quantity + usedOnLot > parseQuantity(line.availableQuantity)) {
       setQuantityErrors((current) => ({ ...current, [line.id]: 'Quantity exceeds the available stock for this lot.' }));
       return;
     }
@@ -151,7 +166,7 @@ export function ReviewSalePage() {
   }
 
   function updatePrice(line: SaleCartLine, value: string) {
-    if (!canEditPrice) return;
+    if (!canEditPrice && !line.soldUnavailable) return;
     if (!/^\d{1,12}(?:\.\d{1,2})?$/.test(value)) {
       setPriceErrors((current) => ({ ...current, [line.id]: 'Enter a non-negative price with up to 2 decimal places.' }));
       return;
@@ -217,14 +232,11 @@ export function ReviewSalePage() {
     setValidationError('');
     setFinalizeError('');
     if (!draft.lines.length) {
-      setValidationError('Add at least one available product to the sale.');
+      setValidationError('Add at least one product to the sale.');
       return;
     }
-    if (
-      draft.customerMode === null ||
-      (draft.customerMode === 'existing' && !draft.customerId)
-    ) {
-      setValidationError('Select an existing customer or explicitly choose Walk-in Customer.');
+    if (draft.customerMode === 'existing' && !draft.customerId) {
+      setValidationError('Select an existing customer or choose Walk-in Customer.');
       return;
     }
     const discount = safeMoney(draft.discountAmount);
@@ -239,6 +251,10 @@ export function ReviewSalePage() {
     }
     if (Object.keys(quantityErrors).length || Object.keys(priceErrors).length) {
       setValidationError('Correct the highlighted quantity or price values before finalizing.');
+      return;
+    }
+    if (draft.lines.some((line) => line.soldUnavailable && parseMoney(line.salePrice) <= 0n)) {
+      setValidationError('Enter a sale price for each unavailable item before finalizing.');
       return;
     }
     if (draft.lines.some((line) => allocateSaleQuantity(line) === null)) {
@@ -259,7 +275,7 @@ export function ReviewSalePage() {
       const completed = await createSale({
         clientRequestId: draft.clientRequestId,
         createInvoice: true,
-        walkInCustomer: draft.customerMode === 'walk-in',
+        walkInCustomer: draft.customerMode !== 'existing',
         ...(draft.customerMode === 'existing' && draft.customerId
           ? { customerId: draft.customerId }
           : {}),
@@ -275,9 +291,10 @@ export function ReviewSalePage() {
         items: draft.lines.flatMap((line) =>
           (allocateSaleQuantity(line) ?? []).map((allocation) => ({
             productId: line.productId,
-            stockId: allocation.stockId,
+            ...(allocation.stockId ? { stockId: allocation.stockId } : {}),
+            ...(line.soldUnavailable ? { soldUnavailable: true } : {}),
             quantity: allocation.quantity,
-            ...(canEditPrice && line.salePrice !== line.defaultSalePrice
+            ...(line.soldUnavailable || (canEditPrice && line.salePrice !== line.defaultSalePrice)
               ? { salePrice: line.salePrice }
               : {}),
           })),
@@ -334,21 +351,20 @@ export function ReviewSalePage() {
         ><Button type="button" variant="secondary" disabled={draft.requestPending || finalizing}><ArrowLeft size={15} />Back to Sale</Button></Link>
       </header>
 
-      {draft.requestPending && (
-        <p role="alert" className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <AlertCircle size={17} className="shrink-0" />
-          A previous submission did not receive a confirmation. The sale is locked and retrying will use the same request ID to check for its saved result.
-        </p>
-      )}
       {draftError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{draftError}</p>}
       {finalizeError && <p role="alert" className="flex gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-800"><AlertCircle size={17} className="mt-0.5 shrink-0" />{finalizeError}</p>}
       {validationError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{validationError}</p>}
 
       <form onSubmit={(event) => void finalize(event)} className="space-y-4">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3"><h2 className="font-semibold text-slate-900">Sale items</h2></div>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <h2 className="font-semibold text-slate-900">Sale items</h2>
+            <Link to="/pos" aria-disabled={draft.requestPending || finalizing} className={draft.requestPending || finalizing ? 'pointer-events-none opacity-50' : ''}>
+              <Button type="button" size="sm" variant="secondary" disabled={draft.requestPending || finalizing}><Plus size={14} />Add items</Button>
+            </Link>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-slate-50 text-xs text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Product</th>
@@ -356,6 +372,7 @@ export function ReviewSalePage() {
                   <th className="px-3 py-3">Quantity</th>
                   <th className="px-3 py-3">Sale price</th>
                   <th className="px-4 py-3 text-right">Line total</th>
+                  <th className="px-3 py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -364,8 +381,9 @@ export function ReviewSalePage() {
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-800">{line.productName}</p>
                       <p className="mt-0.5 text-xs text-slate-500">{line.sku || 'No SKU'} · {line.measuringUnit || 'unit'}</p>
+                      {line.soldUnavailable && <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}
                     </td>
-                    <td className="px-3 py-3 tabular-nums text-slate-600">{line.availableQuantity} {line.measuringUnit}</td>
+                    <td className={`px-3 py-3 ${line.soldUnavailable ? 'font-semibold text-rose-700' : 'tabular-nums text-slate-600'}`}>{line.soldUnavailable ? 'Out of stock' : `${line.availableQuantity} ${line.measuringUnit}`}</td>
                     <td className="px-3 py-3">
                       <Input
                         type="number"
@@ -381,7 +399,7 @@ export function ReviewSalePage() {
                       {quantityErrors[line.id] && <p role="alert" className="mt-1 max-w-36 text-xs text-rose-700">{quantityErrors[line.id]}</p>}
                     </td>
                     <td className="px-3 py-3">
-                      {canEditPrice ? (
+                      {canEditPrice || line.soldUnavailable ? (
                         <>
                           <Input
                             type="number"
@@ -407,6 +425,9 @@ export function ReviewSalePage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatRupees(formatCents(saleLineTotalCents(line)))}</td>
+                    <td className="px-3 py-3 text-right">
+                      <button type="button" onClick={() => removeLine(line.id)} disabled={draft.requestPending || finalizing} aria-label={`Remove ${line.productName}`} title="Remove item" className="rounded-md p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40"><Trash2 size={15} /></button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -518,10 +539,9 @@ export function ReviewSalePage() {
               {(paymentInput === null || paymentInput > totals.total) && <span role="alert" className="mt-1 block text-xs text-rose-700">Payment cannot exceed the grand total.</span>}
             </label>
             <div className="space-y-2 border-t border-slate-100 pt-3">
-              <TotalRow label="Subtotal" value={formatRupees(formatCents(totals.subtotal))} />
+              <TotalRow label="Total amount" value={formatRupees(formatCents(totals.subtotal))} />
               <TotalRow label="Discount" value={`−${formatRupees(formatCents(totals.discount ?? 0n))}`} />
-              <TotalRow label="Tax" value="Not supported" muted />
-              <TotalRow label="Grand total" value={formatRupees(formatCents(totals.total))} strong />
+              <div className="rounded-lg bg-teal-50 px-3 py-3"><TotalRow label="Payable" value={formatRupees(formatCents(totals.total))} strong /></div>
               <TotalRow
                 label="Payment status"
                 value={
@@ -539,7 +559,7 @@ export function ReviewSalePage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
           <p className="text-xs text-slate-500">Finalizing creates the order, invoice and optional payment atomically and deducts stock once.</p>
           <Button type="submit" disabled={finalizing || Boolean(draftError)} className="h-11 min-w-48 text-base">
-            {finalizing ? 'Finalizing…' : draft.requestPending ? 'Retry Finalize Sale' : 'Finalize Sale'}
+            {finalizing ? 'Completing…' : draft.requestPending ? 'Retry Complete Sale' : 'Complete Sale'}
           </Button>
         </div>
       </form>
@@ -557,7 +577,13 @@ function TotalRow({ label, value, muted = false, strong = false }: { label: stri
 
 function readDraftState(): { draft: SaleDraft | null; error: string } {
   try {
-    return { draft: readSaleDraft(), error: '' };
+    const draft = readSaleDraft();
+    return {
+      draft: draft
+        ? { ...draft, customerMode: draft.customerMode ?? 'walk-in' }
+        : null,
+      error: '',
+    };
   } catch (error) {
     return {
       draft: null,

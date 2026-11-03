@@ -16,7 +16,7 @@ const REQUEST_ID = '00000000-0000-4000-8000-000000000003';
 const ADMIN: JwtPayload = { sub: 'admin', email: 'admin@example.test', role: Role.Admin };
 const USER: JwtPayload = { sub: 'user', email: 'user@example.test', role: Role.User };
 
-function createHarness(options: { unit?: string; quantity?: string; price?: string } = {}) {
+function createHarness(options: { unit?: string; quantity?: string; price?: string; noStock?: boolean } = {}) {
   const database = {
     orders: [] as Order[],
     items: [] as OrderItem[],
@@ -73,10 +73,11 @@ function createHarness(options: { unit?: string; quantity?: string; price?: stri
     createQueryBuilder: () => {
       const query = {
         where: () => query,
+        andWhere: () => query,
         orderBy: () => query,
         setLock: () => query,
         withDeleted: () => query,
-        getMany: async () => [database.stock],
+        getMany: async () => options.noStock ? [] : [database.stock],
       };
       return query;
     },
@@ -146,9 +147,13 @@ function createHarness(options: { unit?: string; quantity?: string; price?: stri
   repos.set(Invoice, invoiceRepo);
   repos.set(InvoicePayment, paymentRepo);
 
+  let sequenceValue = 0;
   const manager = {
     getRepository: (entity: unknown) => repos.get(entity),
-    query: async () => undefined,
+    query: async (sql?: string) => {
+      if (sql?.includes('nextval')) return [{ value: ++sequenceValue }];
+      return undefined;
+    },
   };
   const dataSource = {
     transaction: async <T>(callback: (txManager: EntityManager) => Promise<T>) => {
@@ -194,6 +199,20 @@ describe('OrdersService retail sales', () => {
     ).rejects.toThrow('whole number');
     expect(database.stock.remainingQuantity).toBe('5.00');
     expect(database.orders).toHaveLength(0);
+  });
+
+  it('calculates the sale amount from quantity times unit price', async () => {
+    const { service } = createHarness({ quantity: '100.00', price: '50.00' });
+
+    const result = await service.create(
+      saleDto({
+        items: [{ productId: PRODUCT_ID, stockId: STOCK_ID, quantity: '50' }],
+      }),
+      USER,
+    );
+
+    expect(result.subtotal).toBe('2500.00');
+    expect(result.totalAmount).toBe('2500.00');
   });
 
   it('allows fractional quantity for weight units and rejects insufficient stock', async () => {
@@ -245,6 +264,55 @@ describe('OrdersService retail sales', () => {
     expect(result.invoice.amountPaid).toBe('5.00');
     expect(database.invoices).toHaveLength(1);
     expect(database.payments).toHaveLength(1);
+  });
+
+  it('records unavailable items without deducting stock', async () => {
+    const { service, database } = createHarness({ noStock: true, quantity: '0.00' });
+
+    const result = await service.create(
+      saleDto({
+        items: [{ productId: PRODUCT_ID, soldUnavailable: true, quantity: '2' }],
+      }),
+      USER,
+    );
+
+    expect(result.items[0]?.soldUnavailable).toBe(true);
+    expect(result.items[0]?.stockId).toBeNull();
+    expect(database.stock.remainingQuantity).toBe('0.00');
+  });
+
+  it('uses the entered sale price for unavailable items', async () => {
+    const { service } = createHarness({ noStock: true, quantity: '0.00', price: '0.00' });
+
+    const result = await service.create(
+      saleDto({
+        items: [{
+          productId: PRODUCT_ID,
+          soldUnavailable: true,
+          quantity: '2',
+          salePrice: '50.00',
+        }],
+      }),
+      USER,
+    );
+
+    expect(result.items[0]?.salePrice).toBe('50.00');
+    expect(result.subtotal).toBe('100.00');
+  });
+
+  it('rejects unavailable status when the product has remaining stock', async () => {
+    const { service, database } = createHarness({ quantity: '5.00' });
+
+    await expect(
+      service.create(
+        saleDto({
+          items: [{ productId: PRODUCT_ID, soldUnavailable: true, quantity: '1' }],
+        }),
+        USER,
+      ),
+    ).rejects.toThrow('only allowed when the product has no available stock');
+    expect(database.stock.remainingQuantity).toBe('5.00');
+    expect(database.orders).toHaveLength(0);
   });
 
   it('requires explicit walk-in selection when no customer ID is provided', async () => {

@@ -17,6 +17,7 @@ export interface InvoicePaymentRecord {
 export interface InvoiceOrder {
   id: string;
   orderNumber: string;
+  saleNumber: string;
   customerName?: string | null;
   customerPhone?: string | null;
   customerAddress?: string | null;

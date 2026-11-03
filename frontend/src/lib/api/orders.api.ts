@@ -4,8 +4,9 @@ import type { PageResult } from './catalog.types';
 export interface OrderItem {
   id: string;
   orderId: string;
+  soldUnavailable?: boolean;
   productId: string;
-  stockId: string;
+  stockId?: string | null;
   productName: string;
   productSku?: string | null;
   quantity: string;
@@ -17,6 +18,8 @@ export interface OrderItem {
 export interface OrderRecord {
   id: string;
   orderNumber: string;
+  saleNumber: string;
+  invoice?: { invoiceNumber: string } | null;
   customerId?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -75,7 +78,8 @@ export interface CreateSalePayload {
   };
   items: Array<{
     productId: string;
-    stockId: string;
+    stockId?: string;
+    soldUnavailable?: boolean;
     quantity: string;
     salePrice?: string;
   }>;
@@ -119,11 +123,11 @@ export function deleteOrder(id: string) {
 
 export async function getInvoiceForOrder(
   orderId: string,
-  orderNumber: string,
+  saleNumber: string,
   signal?: AbortSignal,
 ): Promise<OrderInvoice | null> {
   const result = await apiRequest<PageResult<OrderInvoice>>(
-    `/invoices${encodeQuery({ page: 1, limit: 100, search: orderNumber })}`,
+    `/invoices${encodeQuery({ page: 1, limit: 100, search: saleNumber })}`,
     { signal },
   );
   return result.data.find((invoice) => invoice.orderId === orderId) ?? null;
