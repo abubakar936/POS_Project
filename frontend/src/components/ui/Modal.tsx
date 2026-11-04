@@ -7,6 +7,7 @@ interface ModalProps {
   description?: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }
 
 export function Modal({
@@ -15,6 +16,7 @@ export function Modal({
   description,
   onClose,
   children,
+  className = '',
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -38,7 +40,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl"
+        className={`w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl ${className}`}
       >
         <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
           <div>

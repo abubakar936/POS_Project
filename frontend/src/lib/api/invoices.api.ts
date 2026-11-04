@@ -8,6 +8,7 @@ export interface InvoicePaymentRecord {
   id: string;
   invoiceId: string;
   amount: string;
+  paymentDate: string;
   paymentMethod: 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'OTHER' | string;
   reference?: string | null;
   note?: string | null;
@@ -68,8 +69,17 @@ export interface UpdateInvoicePayload {
 export interface CreateInvoicePaymentPayload {
   amount: string;
   paymentMethod: 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'OTHER';
+  paymentDate?: string;
   reference?: string;
   note?: string;
+}
+
+export interface UpdateInvoicePaymentPayload {
+  amount?: string;
+  paymentMethod?: CreateInvoicePaymentPayload['paymentMethod'];
+  paymentDate?: string;
+  reference?: string | null;
+  note?: string | null;
 }
 
 export function listInvoices(query: InvoiceQuery, signal?: AbortSignal) {
@@ -117,6 +127,17 @@ export function addInvoicePayment(
   return apiRequest<InvoiceRecord>(
     `/invoices/${encodeURIComponent(id)}/payments`,
     { method: 'POST', body: payload },
+  );
+}
+
+export function updateInvoicePayment(
+  id: string,
+  paymentId: string,
+  payload: UpdateInvoicePaymentPayload,
+) {
+  return apiRequest<InvoiceRecord>(
+    `/invoices/${encodeURIComponent(id)}/payments/${encodeURIComponent(paymentId)}`,
+    { method: 'PATCH', body: payload },
   );
 }
 

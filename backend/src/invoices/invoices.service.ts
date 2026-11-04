@@ -15,6 +15,7 @@ import { Order } from '../orders/order.entity';
 import { OrderItem } from '../orders/order-item.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
+import { UpdateInvoicePaymentDto } from './dto/update-invoice-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoicePayment } from './invoice-payment.entity';
 import { Invoice } from './invoice.entity';
@@ -119,7 +120,7 @@ export class InvoicesService {
 
     const payments = await this.paymentRepo.find({
       where: { invoiceId: id },
-      order: { createdAt: 'ASC' },
+      order: { paymentDate: 'ASC', createdAt: 'ASC' },
     });
     return this.withPaymentSummary(invoice, payments);
   }
@@ -199,6 +200,7 @@ export class InvoicesService {
           paymentMethod: dto.paymentMethod,
           reference: dto.reference ?? null,
           note: dto.note ?? null,
+          paymentDate: dto.paymentDate ?? new Date().toISOString().slice(0, 10),
         }),
       );
       return this.findOneWithManager(manager, id);
@@ -209,7 +211,56 @@ export class InvoicesService {
     await this.ensureInvoiceExists(id, this.invoiceRepo);
     return this.paymentRepo.find({
       where: { invoiceId: id },
-      order: { createdAt: 'ASC' },
+      order: { paymentDate: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  async updatePayment(
+    invoiceId: string,
+    paymentId: string,
+    dto: UpdateInvoicePaymentDto,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const invoice = await manager.getRepository(Invoice).findOne({
+        where: { id: invoiceId, deletedAt: IsNull() },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+
+      const paymentRepo = manager.getRepository(InvoicePayment);
+      const payment = await paymentRepo.findOne({
+        where: { id: paymentId, invoiceId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!payment) throw new NotFoundException('Invoice payment not found');
+
+      const payments = await paymentRepo.find({ where: { invoiceId } });
+      const paidExcludingCurrent = payments
+        .filter((entry) => entry.id !== paymentId)
+        .reduce((sum, entry) => sum + parseScaledDecimal(entry.amount, 2), 0n);
+      const amount = parseScaledDecimal(dto.amount ?? payment.amount, 2);
+      const total = parseScaledDecimal(invoice.totalAmount, 2);
+      if (amount <= 0n) {
+        throw new BadRequestException('Payment amount must be greater than zero');
+      }
+      if (amount > MAX_MONEY_CENTS) {
+        throw new BadRequestException('Payment amount is too large');
+      }
+      if (paidExcludingCurrent + amount > total) {
+        throw new BadRequestException('Payment exceeds the invoice balance');
+      }
+
+      if (dto.amount !== undefined) payment.amount = dto.amount;
+      if (dto.paymentMethod !== undefined && dto.paymentMethod !== null) {
+        payment.paymentMethod = dto.paymentMethod;
+      }
+      if (dto.paymentDate !== undefined && dto.paymentDate !== null) {
+        payment.paymentDate = dto.paymentDate;
+      }
+      if (dto.reference !== undefined) payment.reference = dto.reference;
+      if (dto.note !== undefined) payment.note = dto.note;
+      await paymentRepo.save(payment);
+      return this.findOneWithManager(manager, invoiceId);
     });
   }
 
@@ -243,7 +294,7 @@ export class InvoicesService {
 
     const payments = await manager.getRepository(InvoicePayment).find({
       where: { invoiceId: id },
-      order: { createdAt: 'ASC' },
+      order: { paymentDate: 'ASC', createdAt: 'ASC' },
     });
     return this.withPaymentSummary(invoice, payments);
   }
@@ -257,7 +308,7 @@ export class InvoicesService {
 
     const payments = await repository.find({
       where: { invoiceId: In(ids) },
-      order: { createdAt: 'ASC' },
+      order: { paymentDate: 'ASC', createdAt: 'ASC' },
     });
     for (const payment of payments) {
       const group = groups.get(payment.invoiceId) ?? [];

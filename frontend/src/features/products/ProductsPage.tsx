@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Boxes,
+  Columns3,
   Eye,
   FilePenLine,
   Image,
@@ -38,6 +39,38 @@ import { listStocksForProducts } from '../../lib/api/stocks.api';
 
 const PAGE_SIZE = 50;
 type StatusFilter = 'all' | 'true' | 'false';
+type ProductColumnKey = 'image' | 'product' | 'identifiers' | 'category' | 'stock' | 'status' | 'actions';
+
+const PRODUCT_COLUMNS: Array<{ key: ProductColumnKey; label: string; required?: boolean }> = [
+  { key: 'image', label: 'Image' },
+  { key: 'product', label: 'Product', required: true },
+  { key: 'identifiers', label: 'SKU / barcode' },
+  { key: 'category', label: 'Category' },
+  { key: 'stock', label: 'Stock' },
+  { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Actions', required: true },
+];
+
+const PRODUCT_COLUMNS_STORAGE_KEY = 'pos.product-list-columns.v1';
+const DEFAULT_PRODUCT_COLUMNS: ProductColumnKey[] = PRODUCT_COLUMNS.map((column) => column.key);
+
+function loadVisibleProductColumns(): ProductColumnKey[] {
+  try {
+    const saved = window.localStorage.getItem(PRODUCT_COLUMNS_STORAGE_KEY);
+    if (!saved) return DEFAULT_PRODUCT_COLUMNS;
+    const parsed: unknown = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return DEFAULT_PRODUCT_COLUMNS;
+    const visible = parsed.filter((key): key is ProductColumnKey =>
+      typeof key === 'string' && PRODUCT_COLUMNS.some((column) => column.key === key),
+    );
+    for (const column of PRODUCT_COLUMNS.filter((item) => item.required)) {
+      if (!visible.includes(column.key)) visible.push(column.key);
+    }
+    return visible;
+  } catch {
+    return DEFAULT_PRODUCT_COLUMNS;
+  }
+}
 
 function quantityToHundredths(value: string): bigint {
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value);
@@ -66,6 +99,7 @@ export function ProductsPage() {
   const [page, setPage] = useState(1);
   const [reloadToken, setReloadToken] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState(loadVisibleProductColumns);
   const [meta, setMeta] = useState({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 1 });
   const [stockTotals, setStockTotals] = useState<Map<string, string>>(new Map());
   const [stockError, setStockError] = useState('');
@@ -193,6 +227,19 @@ export function ProductsPage() {
     () => (loading ? 'Loading products…' : `${meta.total.toLocaleString()} products`),
     [loading, meta.total],
   );
+  const shownColumns = PRODUCT_COLUMNS.filter((column) => visibleColumns.includes(column.key));
+
+  useEffect(() => {
+    window.localStorage.setItem(PRODUCT_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  function toggleColumn(key: ProductColumnKey) {
+    const column = PRODUCT_COLUMNS.find((item) => item.key === key);
+    if (column?.required) return;
+    setVisibleColumns((current) => current.includes(key)
+      ? current.filter((item) => item !== key)
+      : PRODUCT_COLUMNS.filter((item) => item.key === key || current.includes(item.key)).map((item) => item.key));
+  }
 
   async function openDetails(product: Product) {
     setSelectedProduct(product);
@@ -271,13 +318,13 @@ export function ProductsPage() {
 
   const tableBody = loading ? (
     <tr>
-      <td colSpan={7}>
+      <td colSpan={shownColumns.length}>
         <FeedbackState tone="loading" title="Loading products" description="Fetching your catalog and stock balances." />
       </td>
     </tr>
   ) : loadError ? (
     <tr>
-      <td colSpan={7}>
+      <td colSpan={shownColumns.length}>
         <FeedbackState
           tone="error"
           title={authError ? 'Sign-in required' : 'Products could not be loaded'}
@@ -290,7 +337,7 @@ export function ProductsPage() {
     </tr>
   ) : products.length === 0 ? (
     <tr>
-      <td colSpan={7}>
+      <td colSpan={shownColumns.length}>
         <FeedbackState
           tone="empty"
           title={search || status !== 'all' ? 'No matching products' : 'Your catalog is empty'}
@@ -302,7 +349,7 @@ export function ProductsPage() {
   ) : (
     products.map((product) => (
       <tr key={product.id} className="text-sm text-slate-600">
-        <td className="px-3 py-3.5">
+        {visibleColumns.includes('image') && <td className="px-3 py-3.5">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-slate-100 text-slate-400">
             {(product.imagePath || product.imageUrl) ? (
               <>
@@ -331,35 +378,35 @@ export function ProductsPage() {
               <Image size={17} aria-hidden="true" />
             )}
           </div>
-        </td>
-        <td className="px-4 py-3.5 first:pl-5">
+        </td>}
+        {visibleColumns.includes('product') && <td className="px-4 py-3.5 first:pl-5">
           <div className="flex min-w-44 items-center gap-3">
             <div className="min-w-0">
-              <p className="truncate font-medium text-slate-800">{product.name}</p>
+              <p className="line-clamp-2 whitespace-normal break-words font-medium text-slate-800">{product.name}</p>
               {(product.marketName || product.nickname) && <p className="truncate text-xs text-slate-500">{product.marketName || product.nickname}</p>}
               <p className="mt-0.5 truncate text-xs text-slate-400">{product.measuringUnit || 'Unit not set'}</p>
             </div>
           </div>
-        </td>
-        <td className="px-4 py-3.5">
+        </td>}
+        {visibleColumns.includes('identifiers') && <td className="px-4 py-3.5">
           <p className="font-mono text-xs text-slate-700">{product.sku || '—'}</p>
           <p className="mt-1 font-mono text-[11px] text-slate-400">{product.barcode || 'No barcode'}</p>
-        </td>
-        <td className="px-4 py-3.5">{product.category?.name || '—'}{product.subCategory?.name && <p className="mt-0.5 text-xs text-slate-400">{product.subCategory.name}</p>}</td>
-        <td className="px-4 py-3.5 text-right tabular-nums">
+        </td>}
+        {visibleColumns.includes('category') && <td className="px-4 py-3.5">{product.category?.name || '—'}{product.subCategory?.name && <p className="mt-0.5 text-xs text-slate-400">{product.subCategory.name}</p>}</td>}
+        {visibleColumns.includes('stock') && <td className="px-4 py-3.5 text-right tabular-nums">
           {stockTotals.has(product.id)
             ? `${stockTotals.get(product.id)}${product.measuringUnit ? ` ${product.measuringUnit}` : ''}`
             : '—'}
-        </td>
-        <td className="px-4 py-3.5"><StatusBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Active' : 'Inactive'}</StatusBadge></td>
-        <td className="px-4 py-3.5 last:pr-5">
+        </td>}
+        {visibleColumns.includes('status') && <td className="px-4 py-3.5"><StatusBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Active' : 'Inactive'}</StatusBadge></td>}
+        {visibleColumns.includes('actions') && <td className="px-4 py-3.5 last:pr-5">
           <div className="flex items-center justify-end gap-1">
             <button type="button" aria-label={`View ${product.name}`} title="View details" onClick={() => void openDetails(product)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Eye size={16} /></button>
             <Link aria-label={`Edit ${product.name}`} title="Edit product" to={`/products/${encodeURIComponent(product.id)}/edit`} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-teal-700"><FilePenLine size={16} /></Link>
             <button type="button" aria-label={product.isActive ? `Deactivate ${product.name}` : `Activate ${product.name}`} title={product.isActive ? 'Deactivate product' : 'Activate product'} onClick={() => void toggleActive(product)} className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:bg-amber-50 hover:text-amber-800">{product.isActive ? 'Disable' : 'Enable'}</button>
             <button type="button" aria-label={`Delete ${product.name}`} title="Delete product" onClick={() => { setActionError(''); setPendingDelete(product); }} className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={16} /></button>
           </div>
-        </td>
+        </td>}
       </tr>
     ))
   );
@@ -398,13 +445,27 @@ export function ProductsPage() {
             <option value="true">Active only</option>
             <option value="false">Inactive only</option>
           </Select>
+          <details className="relative">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100">
+              <Columns3 size={15} />Columns
+            </summary>
+            <fieldset className="absolute right-0 z-20 mt-2 max-h-80 w-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+              <legend className="px-1 text-xs font-semibold text-slate-600">Visible product columns</legend>
+              {PRODUCT_COLUMNS.map((column) => (
+                <label key={column.key} className="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="checkbox" checked={visibleColumns.includes(column.key)} disabled={column.required} onChange={() => toggleColumn(column.key)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                  {column.label}
+                </label>
+              ))}
+            </fieldset>
+          </details>
           <span className="whitespace-nowrap text-xs text-slate-500">{countLabel}</span>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <Table
-          headers={['Image', 'Product', 'SKU / barcode', 'Category', 'Stock', 'Status', 'Actions']}
+          headers={shownColumns.map((column) => column.label)}
           caption="Product catalog"
         >
           {tableBody}

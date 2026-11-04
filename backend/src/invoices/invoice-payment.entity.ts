@@ -26,6 +26,9 @@ export class InvoicePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amount: string;
 
+  @Column({ type: 'date', default: () => 'CURRENT_DATE' })
+  paymentDate: string;
+
   @Column({ type: 'varchar', length: 30 })
   paymentMethod: string;
 

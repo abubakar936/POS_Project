@@ -91,7 +91,12 @@ export class ProductsService {
     if (query.categoryId) qb.andWhere('p.categoryId = :categoryId', { categoryId: query.categoryId });
     if (query.isActive !== undefined) qb.andWhere('p.isActive = :isActive', { isActive: query.isActive === 'true' });
 
-    const [data, total] = await qb.orderBy('p.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();
+    const [data, total] = await qb
+      .orderBy('p.name', 'ASC')
+      .addOrderBy('p.id', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
     const totalPages = Math.ceil(total / limit) || 1;
 
     return { data, meta: { page, limit, total, totalPages } };

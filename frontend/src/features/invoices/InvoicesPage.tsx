@@ -2,6 +2,7 @@ import {
   AlertCircle,
   CalendarDays,
   Eye,
+  FilePenLine,
   FilePlus2,
   Printer,
   ReceiptText,
@@ -37,6 +38,7 @@ import {
   getInvoice,
   listInvoices,
   updateInvoice,
+  updateInvoicePayment,
   type CreateInvoicePaymentPayload,
   type InvoicePaymentRecord,
   type InvoicePaymentStatus,
@@ -55,6 +57,7 @@ interface InvoiceForm {
 interface PaymentForm {
   amount: string;
   paymentMethod: CreateInvoicePaymentPayload['paymentMethod'];
+  paymentDate: string;
   reference: string;
   note: string;
 }
@@ -68,12 +71,26 @@ type PendingAction =
     };
 
 const emptyInvoiceForm: InvoiceForm = { note: '', dueDate: '' };
-const emptyPaymentForm: PaymentForm = {
+const emptyPaymentForm = (): PaymentForm => ({
   amount: '',
   paymentMethod: 'CASH',
+  paymentDate: new Date().toISOString().slice(0, 10),
   reference: '',
   note: '',
-};
+});
+
+function paymentDateInputValue(value?: string | null): string {
+  return value?.slice(0, 10) ?? '';
+}
+
+function PaymentDetail({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{value || '—'}</dd>
+    </div>
+  );
+}
 
 function formatDate(value?: string | null, includeTime = false): string {
   if (!value) return '—';
@@ -129,7 +146,6 @@ function printInvoice(invoice: InvoiceRecord): boolean {
         <td>${escapeHtml(item.productName)}${item.soldUnavailable ? '<small>Unavailable</small>' : ''}${item.productSku ? `<small>${escapeHtml(item.productSku)}</small>` : ''}</td>
         <td class="num">${escapeHtml(item.quantity)}</td>
         <td class="num">${escapeHtml(formatRupees(item.salePrice))}</td>
-        <td class="num">${escapeHtml(formatRupees(item.discountAmount))}</td>
         <td class="num">${escapeHtml(formatRupees(item.lineTotal))}</td>
       </tr>`,
     )
@@ -137,7 +153,7 @@ function printInvoice(invoice: InvoiceRecord): boolean {
   const paymentRows = invoice.payments
     .map(
       (payment) => `<tr>
-        <td>${escapeHtml(formatDate(payment.createdAt, true))}</td>
+        <td>${escapeHtml(formatDate(payment.paymentDate, true))}</td>
         <td>${escapeHtml(payment.paymentMethod.replaceAll('_', ' '))}${payment.reference ? ` · ${escapeHtml(payment.reference)}` : ''}</td>
         <td class="num">${escapeHtml(formatRupees(payment.amount))}</td>
       </tr>`,
@@ -178,7 +194,7 @@ function printInvoice(invoice: InvoiceRecord): boolean {
       <body>
         <main>
           <header class="top">
-            <div><h1>ShopEase POS</h1><p>Business contact and address are not available in the invoice record.</p></div>
+            <div><h1>ShopEase POS</h1></div>
             <div class="meta"><h2>INVOICE</h2><p><strong>${escapeHtml(invoice.invoiceNumber)}</strong></p><p>Issued ${escapeHtml(formatDate(invoice.createdAt))}</p><p>Sale ${escapeHtml(invoice.order?.saleNumber ?? '—')}</p></div>
           </header>
           <section class="details">
@@ -186,14 +202,11 @@ function printInvoice(invoice: InvoiceRecord): boolean {
             <div><div class="label">Payment</div><p><strong>${escapeHtml(invoice.status.replaceAll('_', ' '))}</strong></p><p>Due date: ${escapeHtml(formatDate(invoice.dueDate))}</p><p>Paid: ${escapeHtml(formatRupees(invoice.amountPaid))}</p><p>Balance: ${escapeHtml(formatRupees(invoice.balanceDue))}</p></div>
           </section>
           <table>
-            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Discount</th><th class="num">Line total</th></tr></thead>
-            <tbody>${itemRows || '<tr><td colspan="5">Item details were not returned by the API.</td></tr>'}</tbody>
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line total</th></tr></thead>
+            <tbody>${itemRows || '<tr><td colspan="4">Item details were not returned by the API.</td></tr>'}</tbody>
           </table>
           <table class="totals">
-            <tr><td>Total amount</td><td class="num">${escapeHtml(formatRupees(invoice.subtotal))}</td></tr>
-            <tr><td>Item discounts</td><td class="num">−${escapeHtml(formatRupees(invoice.itemDiscountAmount))}</td></tr>
-            <tr><td>Invoice discount</td><td class="num">−${escapeHtml(formatRupees(invoice.discountAmount))}</td></tr>
-            <tr class="grand"><td>Total</td><td class="num">${escapeHtml(formatRupees(invoice.totalAmount))}</td></tr>
+            <tr class="grand"><td>Total amount</td><td class="num">${escapeHtml(formatRupees(invoice.totalAmount))}</td></tr>
           </table>
           ${paymentRows ? `<section class="section"><div class="label">Payment records</div><table><thead><tr><th>Date</th><th>Method / reference</th><th class="num">Amount</th></tr></thead><tbody>${paymentRows}</tbody></table></section>` : ''}
           ${invoice.note ? `<p class="section"><strong>Note:</strong> ${escapeHtml(invoice.note)}</p>` : ''}
@@ -239,6 +252,8 @@ export function InvoicesPage() {
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<InvoicePaymentRecord | null>(null);
+  const [viewPayment, setViewPayment] = useState<InvoicePaymentRecord | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const location = useLocation();
@@ -406,7 +421,21 @@ export function InvoicesPage() {
   }
 
   function openPayment() {
-    setPaymentForm(emptyPaymentForm);
+    setEditingPayment(null);
+    setPaymentForm(emptyPaymentForm());
+    setFormError('');
+    setPaymentOpen(true);
+  }
+
+  function openPaymentEdit(payment: InvoicePaymentRecord) {
+    setEditingPayment(payment);
+    setPaymentForm({
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod as PaymentForm['paymentMethod'],
+      paymentDate: paymentDateInputValue(payment.paymentDate),
+      reference: payment.reference ?? '',
+      note: payment.note ?? '',
+    });
     setFormError('');
     setPaymentOpen(true);
   }
@@ -416,27 +445,38 @@ export function InvoicesPage() {
     if (!selectedInvoice) return;
     const amountCents = toCents(paymentForm.amount);
     const balanceCents = toCents(selectedInvoice.balanceDue);
+    const currentPaymentCents = editingPayment ? toCents(editingPayment.amount) ?? 0n : 0n;
+    const allowedCents = balanceCents === null ? null : balanceCents + currentPaymentCents;
     if (amountCents === null || amountCents <= 0n) {
       setFormError('Enter a positive amount with no more than two decimal places.');
       return;
     }
-    if (balanceCents !== null && amountCents > balanceCents) {
+    if (allowedCents !== null && amountCents > allowedCents) {
       setFormError('Payment cannot exceed the invoice balance due.');
       return;
     }
     setSaving(true);
     setFormError('');
     try {
-      const updated = await addInvoicePayment(selectedInvoice.id, {
+      const payload: CreateInvoicePaymentPayload = {
         amount: paymentForm.amount,
         paymentMethod: paymentForm.paymentMethod,
+        paymentDate: paymentForm.paymentDate,
         ...(paymentForm.reference.trim() ? { reference: paymentForm.reference.trim() } : {}),
         ...(paymentForm.note.trim() ? { note: paymentForm.note.trim() } : {}),
-      });
+      };
+      const updated = editingPayment
+        ? await updateInvoicePayment(selectedInvoice.id, editingPayment.id, {
+            ...payload,
+            reference: paymentForm.reference.trim() || null,
+            note: paymentForm.note.trim() || null,
+          })
+        : await addInvoicePayment(selectedInvoice.id, payload);
       setSelectedInvoice(updated);
       setPaymentOpen(false);
+      setEditingPayment(null);
       refresh();
-      showToast({ tone: 'success', title: 'Payment recorded', description: `${formatRupees(paymentForm.amount)} was recorded against ${updated.invoiceNumber}.` });
+      showToast({ tone: 'success', title: editingPayment ? 'Payment updated' : 'Payment recorded', description: `${formatRupees(paymentForm.amount)} was ${editingPayment ? 'updated on' : 'recorded against'} ${updated.invoiceNumber}.` });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Could not record this payment.');
     } finally {
@@ -476,11 +516,11 @@ export function InvoicesPage() {
   }
 
   const tableBody = loading ? (
-    <tr><td colSpan={7}><FeedbackState tone="loading" title="Loading invoices" description="Fetching invoice records from the POS server." /></td></tr>
+    <tr><td colSpan={8}><FeedbackState tone="loading" title="Loading invoices" description="Fetching invoice records from the POS server." /></td></tr>
   ) : loadError ? (
-    <tr><td colSpan={7}><FeedbackState tone="error" title={authError ? 'Sign-in required' : 'Invoices could not be loaded'} description={authError ? 'Sign in with a valid POS account to view invoices.' : loadError} action={authError ? <Link to="/login" state={{ from: location }}><Button variant="secondary">Sign in</Button></Link> : <Button variant="secondary" onClick={refresh}>Retry</Button>} /></td></tr>
+    <tr><td colSpan={8}><FeedbackState tone="error" title={authError ? 'Sign-in required' : 'Invoices could not be loaded'} description={authError ? 'Sign in with a valid POS account to view invoices.' : loadError} action={authError ? <Link to="/login" state={{ from: location }}><Button variant="secondary">Sign in</Button></Link> : <Button variant="secondary" onClick={refresh}>Retry</Button>} /></td></tr>
   ) : invoices.length === 0 ? (
-    <tr><td colSpan={7}><FeedbackState tone="empty" title={search ? 'No matching invoices' : 'No invoices yet'} description={search ? 'Try an invoice number, customer name or phone, or order number.' : 'Invoices created from orders will appear here.'} /></td></tr>
+    <tr><td colSpan={8}><FeedbackState tone="empty" title={search ? 'No matching invoices' : 'No invoices yet'} description={search ? 'Try an invoice number, customer name or phone, or sale number.' : 'Invoices created from orders will appear here.'} /></td></tr>
   ) : (
     invoices.map((invoice) => (
       <tr key={invoice.id} className="text-sm text-slate-600">
@@ -494,6 +534,7 @@ export function InvoicesPage() {
           {invoice.customerPhone && <p className="mt-0.5 text-xs text-slate-400">{invoice.customerPhone}</p>}
         </td>
         <td className="px-4 py-3.5 text-right tabular-nums font-medium text-slate-800">{formatRupees(invoice.totalAmount)}</td>
+        <td className="px-4 py-3.5 text-right tabular-nums font-medium text-slate-700">{formatRupees(invoice.balanceDue)}</td>
         <td className="px-4 py-3.5"><StatusBadge tone={statusTone(invoice.status)}>{invoice.status.replaceAll('_', ' ')}</StatusBadge></td>
         <td className="px-4 py-3.5 whitespace-nowrap">{formatDate(invoice.dueDate)}</td>
         <td className="px-4 py-3.5 last:pr-5">
@@ -527,7 +568,7 @@ export function InvoicesPage() {
       {actionError && <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><span className="flex items-center gap-2"><AlertCircle size={17} />{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError('')} className="text-rose-700">Dismiss</button></div>}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <Table headers={['Invoice / order', 'Issue date', 'Customer', 'Total', 'Payment status', 'Due date', 'Actions']} caption="Invoices">
+        <Table headers={['Invoice / sale', 'Invoice date', 'Customer', 'Total amount', 'Remaining amount', 'Payment status', 'Due date', 'Actions']} caption="Invoices">
           {tableBody}
         </Table>
         {!loading && !loadError && meta.total > 0 && <div className="border-t border-slate-100 px-4 py-3"><Pagination page={page} totalPages={meta.totalPages} totalItems={meta.total} pageSize={PAGE_SIZE} onPageChange={setPage} /></div>}
@@ -575,15 +616,15 @@ export function InvoicesPage() {
         </div>
       </Modal>
 
-      <Modal open={selectedInvoice !== null} onClose={() => setSelectedInvoice(null)} title="Invoice details" description={selectedInvoice?.invoiceNumber}>
+      <Modal open={selectedInvoice !== null} onClose={() => setSelectedInvoice(null)} title="Invoice details" description={selectedInvoice?.invoiceNumber} className="max-w-6xl">
         {detailLoading ? <FeedbackState tone="loading" title="Loading invoice details" /> : detailError ? <FeedbackState tone="error" title="Invoice details could not be loaded" description={detailError} /> : selectedInvoice ? (
-          <div className="max-h-[72vh] space-y-5 overflow-y-auto pr-1">
+          <div className="max-h-[82vh] space-y-5 overflow-y-auto pr-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2"><StatusBadge tone={statusTone(selectedInvoice.status)}>{selectedInvoice.status.replaceAll('_', ' ')}</StatusBadge><StatusBadge tone="info">Sale {selectedInvoice.order?.saleNumber ?? 'not available'}</StatusBadge></div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={() => { if (!printInvoice(selectedInvoice)) showToast({ tone: 'error', title: 'Print window blocked', description: 'Allow pop-ups for this POS site, then try printing again.' }); }}><Printer size={14} />Print</Button>
                 <Button variant="secondary" size="sm" onClick={() => openEdit(selectedInvoice)}>Edit note/date</Button>
-                {selectedInvoice.balanceDue !== '0' && selectedInvoice.status !== 'PAID' && <Button size="sm" onClick={openPayment}><WalletCards size={14} />Record payment</Button>}
+                {selectedInvoice.balanceDue !== '0.00' && selectedInvoice.status !== 'PAID' && <Button size="sm" onClick={openPayment}><WalletCards size={14} />Add Payment Entry</Button>}
               </div>
             </div>
 
@@ -598,32 +639,42 @@ export function InvoicesPage() {
             <div>
               <h3 className="mb-2 text-sm font-semibold text-slate-800">Items ({selectedInvoice.order?.items?.length ?? 0})</h3>
               {selectedInvoice.order?.items?.length ? <div className="overflow-x-auto rounded-lg border border-slate-200"><table className="w-full min-w-[560px] text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Description</th><th className="px-3 py-2.5 text-right">Qty</th><th className="px-3 py-2.5 text-right">Unit price</th><th className="px-3 py-2.5 text-right">Discount</th><th className="px-3 py-2.5 text-right">Line total</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{selectedInvoice.order.items.map((item) => <tr key={item.id} className="text-slate-600"><td className="px-3 py-3"><p className="font-medium text-slate-800">{item.productName}</p>{item.soldUnavailable && <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}{item.productSku && <p className="mt-0.5 font-mono text-[10px] text-slate-400">{item.productSku}</p>}</td><td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.salePrice)}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.discountAmount)}</td><td className="px-3 py-3 text-right tabular-nums font-medium text-slate-800">{formatRupees(item.lineTotal)}</td></tr>)}</tbody>
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Description</th><th className="px-3 py-2.5 text-right">Qty</th><th className="px-3 py-2.5 text-right">Unit price</th><th className="px-3 py-2.5 text-right">Line total</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">{selectedInvoice.order.items.map((item) => <tr key={item.id} className="text-slate-600"><td className="px-3 py-3"><p className="font-medium text-slate-800">{item.productName}</p>{item.soldUnavailable && <span className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">Unavailable</span>}{item.productSku && <p className="mt-0.5 font-mono text-[10px] text-slate-400">{item.productSku}</p>}</td><td className="px-3 py-3 text-right tabular-nums">{item.quantity}</td><td className="px-3 py-3 text-right tabular-nums">{formatRupees(item.salePrice)}</td><td className="px-3 py-3 text-right tabular-nums font-medium text-slate-800">{formatRupees(item.lineTotal)}</td></tr>)}</tbody>
               </table></div> : <FeedbackState tone="empty" title="Line items unavailable" description="The invoice detail response did not include order items." />}
             </div>
 
-            <div className="ml-auto max-w-xs space-y-2 text-sm">
-              <div className="flex justify-between gap-6 text-slate-500"><span>Total amount</span><span className="tabular-nums">{formatRupees(selectedInvoice.subtotal)}</span></div>
-              <div className="flex justify-between gap-6 text-slate-500"><span>Item discounts</span><span className="tabular-nums">−{formatRupees(selectedInvoice.itemDiscountAmount)}</span></div>
-              <div className="flex justify-between gap-6 text-slate-500"><span>Invoice discount</span><span className="tabular-nums">−{formatRupees(selectedInvoice.discountAmount)}</span></div>
-              <div className="flex justify-between gap-6 border-t border-slate-200 pt-2 font-semibold text-slate-900"><span>Total</span><span className="tabular-nums">{formatRupees(selectedInvoice.totalAmount)}</span></div>
-              <div className="flex justify-between gap-6 text-xs text-slate-500"><span>Paid · Balance</span><span className="tabular-nums">{formatRupees(selectedInvoice.amountPaid)} · {formatRupees(selectedInvoice.balanceDue)}</span></div>
-            </div>
+            <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+              <div><p className="text-xs text-slate-500">Total Amount</p><p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">{formatRupees(selectedInvoice.totalAmount)}</p></div>
+              <div><p className="text-xs text-slate-500">Total Paid</p><p className="mt-1 text-lg font-semibold tabular-nums text-emerald-700">{formatRupees(selectedInvoice.amountPaid)}</p></div>
+              <div><p className="text-xs text-slate-500">Remaining Amount</p><p className="mt-1 text-lg font-semibold tabular-nums text-rose-700">{formatRupees(selectedInvoice.balanceDue)}</p></div>
+            </section>
 
             <section>
-              <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-800">Payments ({selectedInvoice.payments.length})</h3></div>
-              {selectedInvoice.payments.length ? <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100">{selectedInvoice.payments.map((payment) => <li key={payment.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-xs"><span className="text-slate-600">{payment.paymentMethod.replaceAll('_', ' ')}{payment.reference ? ` · ${payment.reference}` : ''}<span className="mt-0.5 block text-[10px] text-slate-400">{formatDate(payment.createdAt, true)}{payment.note ? ` · ${payment.note}` : ''}</span></span><span className="flex items-center gap-2"><strong className="font-medium tabular-nums text-slate-800">{formatRupees(payment.amount)}</strong><button type="button" title="Remove payment record" aria-label={`Remove payment ${formatRupees(payment.amount)}`} onClick={() => setPendingAction({ kind: 'delete-payment', invoice: selectedInvoice, payment })} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={14} /></button></span></li>)}</ul> : <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">No payments have been recorded.</p>}
+              <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-800">Payment entries ({selectedInvoice.payments.length})</h3></div>
+              {selectedInvoice.payments.length ? <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100">{selectedInvoice.payments.map((payment) => <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-xs"><span className="min-w-0 flex-1"><span className="block font-medium text-slate-800">{formatRupees(payment.amount)} · {payment.paymentMethod.replaceAll('_', ' ')}</span><span className="mt-1 block text-[10px] text-slate-500">{formatDate(payment.paymentDate)}{payment.reference ? ` · ${payment.reference}` : ''}</span></span><span className="flex items-center gap-1"><button type="button" title="View payment details" aria-label={`View payment ${formatRupees(payment.amount)}`} onClick={() => setViewPayment(payment)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><Eye size={15} /></button><button type="button" title="Edit payment entry" aria-label={`Edit payment ${formatRupees(payment.amount)}`} onClick={() => openPaymentEdit(payment)} className="rounded-md p-2 text-slate-500 hover:bg-teal-50 hover:text-teal-700"><FilePenLine size={15} /></button><button type="button" title="Remove payment entry" aria-label={`Remove payment ${formatRupees(payment.amount)}`} onClick={() => setPendingAction({ kind: 'delete-payment', invoice: selectedInvoice, payment })} className="rounded-md p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={14} /></button></span></li>)}</ul> : <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">No payments have been recorded.</p>}
             </section>
 
             {selectedInvoice.note && <div className="rounded-lg border border-slate-100 p-3"><p className="text-xs font-medium text-slate-500">Invoice note</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{selectedInvoice.note}</p></div>}
 
             <div className="space-y-2 border-t border-slate-100 pt-4">
-              <p className="text-xs leading-5 text-slate-500">Invoice number, customer snapshot, line items, discounts, and totals are server-controlled. Invoice cancellation is not supported.</p>
+              <p className="text-xs leading-5 text-slate-500">Invoice number, customer snapshot, line items, and total amount are server-controlled. Invoice cancellation is not supported.</p>
               {selectedInvoice.payments.length > 0 ? <p className="text-xs text-amber-700">This invoice cannot be deleted while active payments exist. Remove the payment records first if deletion is genuinely required.</p> : <Button variant="danger" size="sm" onClick={() => setPendingAction({ kind: 'delete-invoice', invoice: selectedInvoice })}><Trash2 size={14} />Delete invoice</Button>}
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal open={viewPayment !== null} onClose={() => setViewPayment(null)} title="Payment entry details" description={selectedInvoice?.invoiceNumber}>
+        {viewPayment && (
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <PaymentDetail label="Amount" value={formatRupees(viewPayment.amount)} />
+            <PaymentDetail label="Payment date" value={formatDate(viewPayment.paymentDate)} />
+            <PaymentDetail label="Payment method" value={viewPayment.paymentMethod.replaceAll('_', ' ')} />
+            <PaymentDetail label="Reference" value={viewPayment.reference} />
+            <div className="sm:col-span-2"><PaymentDetail label="Note" value={viewPayment.note} /></div>
+          </dl>
+        )}
       </Modal>
 
       <Modal open={editOpen} onClose={() => { if (!saving) setEditOpen(false); }} title="Edit invoice note and due date" description="Financial values and invoice numbering cannot be changed.">
@@ -635,15 +686,16 @@ export function InvoicesPage() {
         </form>
       </Modal>
 
-      <Modal open={paymentOpen} onClose={() => { if (!saving) setPaymentOpen(false); }} title="Record invoice payment" description={`Outstanding balance: ${formatRupees(selectedInvoice?.balanceDue)}`}>
+      <Modal open={paymentOpen} onClose={() => { if (!saving) { setPaymentOpen(false); setEditingPayment(null); } }} title={editingPayment ? 'Edit payment entry' : 'Add payment entry'} description={`Remaining amount: ${formatRupees(selectedInvoice?.balanceDue)}`}>
         <form onSubmit={(event) => void submitPayment(event)} className="space-y-4">
           <label className="block text-xs font-medium text-slate-600">Amount (Rs.)<Input inputMode="decimal" placeholder="0.00" value={paymentForm.amount} onChange={(event) => setPaymentForm((form) => ({ ...form, amount: event.target.value }))} className="mt-1" required /></label>
+          <label className="block text-xs font-medium text-slate-600">Payment date<Input type="date" value={paymentForm.paymentDate} onChange={(event) => setPaymentForm((form) => ({ ...form, paymentDate: event.target.value }))} className="mt-1" required /></label>
           <label className="block text-xs font-medium text-slate-600">Payment method<Select value={paymentForm.paymentMethod} onChange={(event) => setPaymentForm((form) => ({ ...form, paymentMethod: event.target.value as PaymentForm['paymentMethod'] }))} className="mt-1"><option value="CASH">Cash</option><option value="CARD">Card</option><option value="BANK_TRANSFER">Bank transfer</option><option value="OTHER">Other</option></Select></label>
           <label className="block text-xs font-medium text-slate-600">Reference (optional)<Input value={paymentForm.reference} onChange={(event) => setPaymentForm((form) => ({ ...form, reference: event.target.value }))} className="mt-1" /></label>
           <label className="block text-xs font-medium text-slate-600">Note (optional)<textarea value={paymentForm.note} onChange={(event) => setPaymentForm((form) => ({ ...form, note: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" /></label>
           <p className="text-xs leading-5 text-slate-500">This records a payment entry only. It does not charge a card or contact a bank. The server rejects payments above the remaining balance.</p>
           {formError && <p role="alert" className="text-xs text-rose-700">{formError}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setPaymentOpen(false)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Record payment'}</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => { setPaymentOpen(false); setEditingPayment(null); }} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving…' : editingPayment ? 'Save payment changes' : 'Add Payment Entry'}</Button></div>
         </form>
       </Modal>
 

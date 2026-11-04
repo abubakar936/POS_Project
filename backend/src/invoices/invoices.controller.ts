@@ -13,6 +13,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
+import { UpdateInvoicePaymentDto } from './dto/update-invoice-payment.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoicesService } from './invoices.service';
 
@@ -50,6 +51,15 @@ export class InvoicesController {
   @Get(':id/payments')
   findPayments(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.invoicesService.findPayments(id);
+  }
+
+  @Patch(':id/payments/:paymentId')
+  updatePayment(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('paymentId', new ParseUUIDPipe()) paymentId: string,
+    @Body() dto: UpdateInvoicePaymentDto,
+  ) {
+    return this.invoicesService.updatePayment(id, paymentId, dto);
   }
 
   @Delete(':id/payments/:paymentId')

@@ -362,6 +362,7 @@ export function StocksPage() {
   const [priceConfirmOpen, setPriceConfirmOpen] = useState(false);
   const [priceSaving, setPriceSaving] = useState(false);
   const [viewStock, setViewStock] = useState<InventoryStockRecord | null>(null);
+  const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [editStock, setEditStock] = useState<InventoryStockRecord | null>(null);
   const [editValues, setEditValues] = useState<StockEditValues | null>(null);
   const [editError, setEditError] = useState('');
@@ -605,7 +606,17 @@ export function StocksPage() {
             .map((record) => ({ item, record }))
         : [{ item, record: null }],
   );
-  const visibleInventory = inventoryRows;
+  const visibleInventory = [...inventoryRows].sort((left, right) => {
+    const quantityGroup = (row: InventoryRow) => {
+      const quantity = row.item.quantityHundredths;
+      return quantity > 0n ? 0 : quantity === 0n ? 1 : 2;
+    };
+    const groupDifference = quantityGroup(left) - quantityGroup(right);
+    if (groupDifference) return groupDifference;
+    const nameDifference = left.item.product.name.localeCompare(right.item.product.name, 'en', { sensitivity: 'base' });
+    if (nameDifference) return nameDifference;
+    return (left.record?.id ?? '').localeCompare(right.record?.id ?? '');
+  });
   const activeVendors = vendors.filter((vendor) => vendor.isActive);
   const activeCompanies = companies.filter((company) => company.isActive);
 
@@ -964,7 +975,7 @@ export function StocksPage() {
               </Select>
             </div>
             <details className="relative">
-              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-transparent bg-gradient-to-r from-teal-700 via-cyan-700 to-sky-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:from-teal-800 hover:via-cyan-800 hover:to-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2">
                 <Columns3 size={15} /> Columns
               </summary>
               <fieldset className="absolute right-0 z-20 mt-2 max-h-80 w-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
@@ -1024,10 +1035,13 @@ export function StocksPage() {
                     {visibleColumns.includes('stockValue') && <td className="px-4 py-3.5 tabular-nums">{record ? formatRupeesFromCents(lotValueCents(record)) : '—'}</td>}
                     {visibleColumns.includes('actions') && <td className="px-3 py-3.5 last:pr-5 text-right">
                       <div className="flex justify-end gap-1">
-                        {record && <>
-                          <button type="button" aria-label={`View stock for ${item.product.name}`} onClick={() => setViewStock({ ...record, product: item.product })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800"><Eye size={14} />View</button>
+                        <button type="button" aria-label={`View ${record ? 'stock' : 'product'} for ${item.product.name}`} onClick={() => record ? setViewStock({ ...record, product: item.product }) : setViewProduct(item.product)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800"><Eye size={14} />View</button>
+                        {record ? <>
                           <button type="button" aria-label={`Edit stock for ${item.product.name}`} onClick={() => beginEditStock({ ...record, product: item.product })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-teal-700"><FilePenLine size={14} />Edit</button>
                           <button type="button" aria-label={`Edit sale price for ${item.product.name}`} title="Edit sale price" onClick={() => { setPriceEditStock(record); setPriceEditValue(record.salePrice); setPriceEditError(''); }} className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100">Sale</button>
+                        </> : <>
+                          <Link aria-label={`Edit product ${item.product.name}`} to={`/products/${encodeURIComponent(item.product.id)}/edit`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-teal-700"><FilePenLine size={14} />Edit</Link>
+                          <button type="button" aria-label={`Add stock for ${item.product.name}`} onClick={() => beginAddStock(item.product.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"><PackagePlus size={14} />Add</button>
                         </>}
                       </div>
                     </td>}
@@ -1202,6 +1216,30 @@ export function StocksPage() {
             </dl>
             <div className="flex justify-end border-t border-slate-100 pt-4">
               <Button variant="secondary" onClick={() => setViewStock(null)}>Close</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={viewProduct !== null}
+        onClose={() => setViewProduct(null)}
+        title="Product details"
+        description={viewProduct?.name}
+      >
+        {viewProduct && (
+          <div className="space-y-5">
+            <dl className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+              <Detail label="Product Market Name" value={viewProduct.marketName ?? viewProduct.nickname} />
+              <Detail label="Category" value={viewProduct.category?.name} />
+              <Detail label="SKU" value={viewProduct.sku} />
+              <Detail label="Barcode" value={viewProduct.barcode} />
+              <Detail label="Measuring unit" value={viewProduct.measuringUnit} />
+              <Detail label="Status" value={viewProduct.isActive ? 'Active' : 'Inactive'} />
+            </dl>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button variant="secondary" onClick={() => setViewProduct(null)}>Close</Button>
+              <Button onClick={() => { const productId = viewProduct.id; setViewProduct(null); beginAddStock(productId); }}><PackagePlus size={14} />Add stock</Button>
             </div>
           </div>
         )}

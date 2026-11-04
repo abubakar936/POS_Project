@@ -38,6 +38,9 @@ export class OrderItem {
   @Column({ type: 'boolean', default: false })
   soldUnavailable: boolean;
 
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  purchasePrice?: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   productName: string;
 

@@ -206,9 +206,6 @@ export function ProductFormPage() {
           <Field label="Product Market Name / Short Name" hint="Optional common name used to recognize this product." error={fieldErrors.marketName}>
             <Input id="marketName" maxLength={255} value={values.marketName} onChange={(event) => updateField('marketName', event.target.value)} aria-invalid={Boolean(fieldErrors.marketName)} />
           </Field>
-          <Field label="SKU" hint="Optional internal product code." error={fieldErrors.sku}>
-            <Input id="sku" value={values.sku} onChange={(event) => updateField('sku', event.target.value)} aria-invalid={Boolean(fieldErrors.sku)} />
-          </Field>
           <Field label="Barcode" hint="Optional barcode value." error={fieldErrors.barcode}>
             <Input id="barcode" value={values.barcode} onChange={(event) => updateField('barcode', event.target.value)} aria-invalid={Boolean(fieldErrors.barcode)} />
           </Field>

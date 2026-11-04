@@ -85,16 +85,36 @@ All order and invoice endpoints require the existing JWT authorization.
   `DELETE /invoices/:id` provide invoice CRUD; updates are limited to the note
   and due date.
 - `POST /invoices/:id/payments` records `{ "amount": "50.00",
-  "paymentMethod": "CASH" }`. `GET /invoices/:id/payments` lists active
-  payments and `DELETE /invoices/:id/payments/:paymentId` removes a payment.
+  "paymentMethod": "CASH", "paymentDate": "2026-11-04" }` as a new installment.
+  `GET /invoices/:id/payments` lists active payments, `PATCH
+  /invoices/:id/payments/:paymentId` edits one installment, and
+  `DELETE /invoices/:id/payments/:paymentId` removes a payment.
   Payments cannot exceed the invoice balance; invoice responses include
   `amountPaid`, `balanceDue`, and `status`. An invoice with active payments must
   have those payments removed before it can be deleted.
 
-Apply `1792700000000-AddSaleNumbersAndUnavailableItems` before starting the
-updated application on an existing database. It backfills readable sale and
-invoice numbers, creates persistent number sequences, and adds the
-unavailable-item flag while making the order-item stock reference nullable.
+## Dashboard
+
+`GET /dashboard` requires JWT authorization and accepts `from` and `to` ISO
+timestamps, an optional `bucket` (`hour`, `day`, `week`, or `month`), and an
+optional IANA `timeZone`. The `to` timestamp is exclusive and ranges are limited
+to 366 days. Sales, payment receipts, customer counts, receivables, product
+rankings, trends, and recent sales are aggregated in PostgreSQL. Low-stock
+quantities reflect current inventory. Lifetime sales are intentionally not
+limited by the selected range.
+
+Order-item purchase prices are snapshotted at sale time. Profit is returned as
+`null` when the selected period includes a sale item without a known purchase
+cost; `unknownCostItems` indicates the missing coverage instead of treating
+unknown cost as zero.
+
+Apply pending TypeORM migrations before starting the updated application on an
+existing database. `1792700000000-AddSaleNumbersAndUnavailableItems` backfills
+readable sale and invoice numbers and adds unavailable-item tracking.
+`1792800000000-AddOrderItemPurchasePriceSnapshot` backfills available purchase
+costs and adds indexes used by dashboard aggregates.
+`1792900000000-AddInvoicePaymentDate` backfills each historical installment date
+from its creation timestamp and adds the invoice-payment lookup index.
 
 ## Deployment
 

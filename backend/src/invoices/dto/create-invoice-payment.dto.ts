@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  IsDateString,
 } from 'class-validator';
 
 const PAYMENT_METHODS = ['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER'];
@@ -16,6 +17,10 @@ export class CreateInvoicePaymentDto {
 
   @IsIn(PAYMENT_METHODS)
   paymentMethod: string;
+
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
 
   @IsOptional()
   @IsString()

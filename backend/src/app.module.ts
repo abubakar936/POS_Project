@@ -12,6 +12,7 @@ import { VendorsModule } from './vendors/vendors.module';
 import { CompaniesModule } from './companies/companies.module';
 import { OrdersModule } from './orders/orders.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { createDatabaseOptions } from './database/database-options';
 
 @Module({
@@ -41,6 +42,7 @@ import { createDatabaseOptions } from './database/database-options';
     CustomersModule,
     OrdersModule,
     InvoicesModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

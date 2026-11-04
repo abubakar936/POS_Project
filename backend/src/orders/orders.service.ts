@@ -32,6 +32,7 @@ interface PreparedItem {
   product: Product;
   stock: Stock | null;
   soldUnavailable: boolean;
+  purchasePrice: string | null;
   quantity: bigint;
   salePrice: bigint;
   discount: bigint;
@@ -148,6 +149,7 @@ export class OrdersService {
             productId: item.product.id,
             stockId: item.stock?.id ?? null,
             soldUnavailable: item.soldUnavailable,
+            purchasePrice: item.purchasePrice,
             productName: item.product.name,
             productSku: item.product.sku ?? null,
             quantity: formatScaledDecimal(item.quantity, 2),
@@ -334,6 +336,7 @@ export class OrdersService {
               productId: item.product.id,
               stockId: item.stock?.id ?? null,
               soldUnavailable: item.soldUnavailable,
+              purchasePrice: item.purchasePrice,
               productName: item.product.name,
               productSku: item.product.sku ?? null,
               quantity: formatScaledDecimal(item.quantity, 2),
@@ -522,6 +525,14 @@ export class OrdersService {
         requested.salePrice ?? defaultSalePrice ?? '0.00',
         2,
       );
+      const fallbackCost = requested.soldUnavailable
+        ? stocks
+            .filter((record) => record.productId === product.id && !record.deletedAt)
+            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+            .find((record) => record.purchasePrice)
+        : undefined;
+      const purchasePrice =
+        stock?.purchasePrice ?? fallbackCost?.purchasePrice ?? product.purchasePrice ?? null;
       const discount = parseScaledDecimal(requested.discountAmount ?? '0', 2);
       const lineTotal = calculateLineTotal(salePrice, quantity, discount);
       if (discount < 0n || lineTotal < 0n) {
@@ -535,6 +546,7 @@ export class OrdersService {
         product,
         stock,
         soldUnavailable: requested.soldUnavailable ?? false,
+        purchasePrice,
         quantity,
         salePrice,
         discount,
@@ -580,6 +592,7 @@ export class OrdersService {
         product,
         stock,
         soldUnavailable: item.soldUnavailable,
+        purchasePrice: item.purchasePrice ?? null,
         quantity,
         salePrice,
         discount,
